@@ -363,9 +363,14 @@ Word-level F1, in percent:
 | khPOS open test | open word lists with SEALang/Bible counts | **79.17** | 75.53 |
 | khPOS open test | open word lists, counts from EM on ALT text | 77.14 | |
 | khPOS open test | ICU list only (no counts) | 76.46 | 76.45 |
+| khPOS open test | ICU 78.3 word break iterator (its own engine and dictionary) | 71.35 | |
 | ALT test, atom level | ALT training words and counts | **93.79** | 89.76 |
 | ALT test, compound level | ALT training words and counts | **83.02** | 78.62 |
 | ALT test, compound level | khPOS training words (other corpus) | 73.31 | |
+| ALT test, compound level | open word lists with SEALang/Bible counts | 74.25 | |
+| ALT test, compound level | ICU 78.3 word break iterator | 63.69 | |
+| ALT test, atom level | open word lists with SEALang/Bible counts | 70.40 | |
+| ALT test, atom level | ICU 78.3 word break iterator | 56.77 | |
 
 On khPOS, Viterbi beats forward matching by 0.94 points (95% CI 0.65 to
 1.23, paired bootstrap, p < 0.001).
@@ -390,8 +395,14 @@ What the numbers say:
   EM counts give 77.14, against 79.17 with the SEALang/Bible counts.
 - The two corpora disagree with each other: a khPOS dictionary scores 73 on
   ALT.
-- These numbers are not compared with ICU's Khmer word break iterator yet;
-  see Limitations.
+- ICU's Khmer word break iterator, which browsers and many libraries use
+  for Khmer, scores 71.35 on khPOS. khseg with open word lists and no
+  training data beats it by 7.82 points (95% CI 6.72 to 8.95, p < 0.001),
+  and by about 10 to 14 points on ALT. Given only ICU's word list, without
+  counts, khseg gets 76.46, so about two thirds of the gap comes from the
+  search and unknown-word handling and the rest from the counts. ICU's
+  Khmer dictionary was made for line breaking, where splitting a word too
+  finely does less harm, so this compares the two on word segmentation only.
 
 Speed, single thread, Ryzen 5 5600H, GCC 13
 ([details](bench/results/throughput.md)):
@@ -400,6 +411,7 @@ Speed, single thread, Ryzen 5 5600H, GCC 13
 |---|---|---|
 | Viterbi | 44.9 | 71.6 |
 | forward matching | 78.0 | 106.8 |
+| ICU 78.3 word break (own dictionary) | 27.5 | |
 
 The command line tool processes a 50 MB file in about 1.5 s including I/O
 with one thread, and in 0.44 s with `-j 12` (115 MB/s). The binary
@@ -431,6 +443,10 @@ khseg-dict build khmer.tsv -o khmer.khd [--unk-cost 8]
 khseg-dict stats khmer.khd
 khseg-dict check khmer.tsv     # every rejected or suspicious entry
 ```
+
+**khseg-icu** (built with `-DKHSEG_BENCH_ICU=ON` and ICU installed)
+segments with ICU's word break iterator in the same output format, for
+scoring with `khseg-eval --pred`, and has a `--bench` mode.
 
 **khseg-bench** measures in-memory throughput for each algorithm and appends
 CSV rows:
@@ -478,8 +494,6 @@ dictionary entry, and that output is deterministic.
   spelling variants that use different letters (for example the old
   subscript ដ versus ត in ត្ដ and ត្ត), and it leaves clusters with a stray
   COENG untouched.
-- There is no comparison with ICU's dictionary-based Khmer word break
-  iterator yet. It needs ICU installed; `KHSEG_BENCH_ICU` is reserved for it.
 - No dictionary is shipped. You build one from the sources above, and the
   licenses decide what you can redistribute.
 - Text in legacy (non-Unicode) Khmer fonts is not detected.

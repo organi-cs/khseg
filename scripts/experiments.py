@@ -87,6 +87,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--bin", required=True, type=pathlib.Path)
     ap.add_argument("--skip-prepare", action="store_true")
+    ap.add_argument("--icu", type=pathlib.Path,
+                    help="khseg-icu executable; adds ICU word break rows (build with -DKHSEG_BENCH_ICU=ON)")
     ap.add_argument("--out", type=pathlib.Path, default=ROOT / "bench/results/accuracy.md")
     args = ap.parse_args()
 
@@ -110,8 +112,12 @@ def main() -> int:
          "ALT train (in-domain)", W / "alt.compound.train.tsv", ["viterbi", "fmm"]),
         ("ALT test (compound)", W / "alt.compound.dev.txt", W / "alt.compound.test.txt",
          "khPOS train (other corpus)", W / "khpos.train.tsv", ["viterbi"]),
+        ("ALT test (compound)", W / "alt.compound.dev.txt", W / "alt.compound.test.txt",
+         "open lists + SEALang/Bible counts", W / "lb.tsv", ["viterbi"]),
         ("ALT test (atom)", W / "alt.atom.dev.txt", W / "alt.atom.test.txt",
          "ALT train (in-domain)", W / "alt.atom.train.tsv", ["viterbi", "fmm"]),
+        ("ALT test (atom)", W / "alt.atom.dev.txt", W / "alt.atom.test.txt",
+         "open lists + SEALang/Bible counts", W / "lb.tsv", ["viterbi"]),
     ]
 
     rows = []
@@ -133,6 +139,34 @@ def main() -> int:
                    W / "khpos.train.tsv"])
     diff_line = next(l.strip() for l in cmp_out.splitlines() if l.strip().startswith("difference"))
 
+    # ICU's word break iterator with its built-in Khmer dictionary. It has no
+    # parameters to tune; the dictionary argument only sets the OOV columns.
+    icu_lines = []
+    if args.icu:
+        for test_label, test in (("khPOS open test", khpos_test),
+                                 ("ALT test (compound)", W / "alt.compound.test.txt"),
+                                 ("ALT test (atom)", W / "alt.atom.test.txt")):
+            raw = "".join("".join(l.split()) + "\n" for l in test.read_text(encoding="utf-8").splitlines())
+            out = subprocess.run([str(args.icu)], input=raw, capture_output=True, text=True,
+                                 encoding="utf-8", check=True).stdout
+            pred = W / f"pred.icu.{test.stem}.txt"
+            pred.write_text(out, encoding="utf-8", newline="\n")
+            r = run([evaluate, "--gold", test, "--pred", pred, "--dict", W / "lb.tsv", "--tsv", "row"])
+            rows.append((test_label, "ICU built-in", "ICU word break", "n/a",
+                         r.strip().splitlines()[-1].split("\t")[1:]))
+        unk = tune(evaluate, khpos_dev, W / "lb.tsv")
+        a = predict(khseg, khpos_test, W / "lb.tsv", "viterbi", unk, W / "pred.lb.viterbi.txt")
+        cmp_out = run([evaluate, "--gold", khpos_test, "--pred", a, "--compare",
+                       W / f"pred.icu.{khpos_test.stem}.txt"])
+        icu_diff = next(l.strip() for l in cmp_out.splitlines() if l.strip().startswith("difference"))
+        icu_version = run([args.icu, "--bench", "--min-mb", "0", "--repeat", "1",
+                           W / "khpos.test.txt"]).splitlines()[0]
+        icu_lines = ["", f"ICU rows: {icu_version}. khseg Viterbi with the open word lists against ICU",
+                     f"on the khPOS open test, paired bootstrap: {icu_diff}"]
+
+    order = ["khPOS open test", "ALT test (compound)", "ALT test (atom)"]
+    rows.sort(key=lambda row: order.index(row[0]))
+
     commit = run(["git", "-C", ROOT, "describe", "--always", "--dirty"]).strip()
     lines = [
         "# Accuracy",
@@ -147,11 +181,11 @@ def main() -> int:
     ]
     for test_label, dict_label, algo, unk, r in rows:
         p, rec, f1, lo, hi, bf1, exact, oov_rate, oov_rec = r
-        unk_s = f"{unk:g}" if unk is not None else "default"
+        unk_s = unk if isinstance(unk, str) else f"{unk:g}" if unk is not None else "default"
         lines.append(f"| {test_label} | {dict_label} | {algo} | {unk_s} | {p} | {rec} | "
                      f"**{f1}** ({lo} to {hi}) | {bf1} | {exact} | {oov_rate} | {oov_rec} |")
     lines += ["", "Viterbi against forward maximal matching on the khPOS open test (in-domain dictionary),",
-              f"paired bootstrap: {diff_line}", ""]
+              f"paired bootstrap: {diff_line}"] + icu_lines + [""]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines), encoding="utf-8", newline="\n")
     print(f"wrote {args.out}", file=sys.stderr)

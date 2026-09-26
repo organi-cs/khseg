@@ -21,3 +21,21 @@ if(WIN32)
   target_link_libraries(khseg-bench PRIVATE psapi)
 endif()
 khseg_configure_target(khseg-bench)
+
+# ICU baseline. Point ICU_ROOT at an ICU install, e.g. the unzipped
+# icu4c-*-Win64-MSVC2022.zip from the ICU release page.
+if(KHSEG_BENCH_ICU)
+  find_package(ICU REQUIRED COMPONENTS uc data)
+  add_executable(khseg-icu khseg-icu/main.cpp)
+  target_link_libraries(khseg-icu PRIVATE khseg::khseg CLI11::CLI11 ICU::uc ICU::data)
+  khseg_configure_target(khseg-icu)
+  if(WIN32)
+    # Copy the ICU DLLs next to the tool so it runs without PATH changes.
+    get_filename_component(_icu_lib_dir "${ICU_UC_LIBRARY}" DIRECTORY)
+    file(GLOB _icu_dlls "${_icu_lib_dir}/../bin64/icu*.dll" "${_icu_lib_dir}/../bin/icu*.dll")
+    foreach(_dll IN LISTS _icu_dlls)
+      add_custom_command(TARGET khseg-icu POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_dll} $<TARGET_FILE_DIR:khseg-icu>)
+    endforeach()
+  endif()
+endif()

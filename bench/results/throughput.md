@@ -38,6 +38,11 @@ khseg-bench -d data/work/lb.khd -i data/work/bench.txt --min-mb 100 --repeat 5
 | backward maximal matching | 101.6 | 7.80 M |
 | bidirectional maximal matching | 69.8 | 5.35 M |
 
+ICU 78.3's word break iterator (locale `km`, its own dictionary) on the same
+100.6 MB input, measured by `khseg-icu --bench --min-mb 100 --repeat 5`:
+27.5 MB/s median, 32.1 MB/s best. It reads the UTF-8 lines through
+`utext_openUTF8`, the same input khseg gets.
+
 Viterbi tries a dictionary walk from every cluster boundary, while maximal
 matching only walks from the start of each chosen word, so Viterbi being
 slower is expected. A larger dictionary means longer trie walks.

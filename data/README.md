@@ -71,6 +71,15 @@ python scripts/fetch_data.py
 python scripts/experiments.py --bin build/mingw-release/tools
 ```
 
+To add the ICU baseline rows, build `khseg-icu` and pass it in:
+
+```bash
+python scripts/fetch_data.py icu-bin      # Windows; on Linux install libicu-dev instead
+cmake --preset mingw-release -DKHSEG_BENCH_ICU=ON -DICU_ROOT=data/external/icu-bin
+cmake --build --preset mingw-release
+python scripts/experiments.py --bin build/mingw-release/tools --icu build/mingw-release/tools/khseg-icu.exe
+```
+
 `fetch_data.py` downloads the sources above into `data/external/`.
 `experiments.py` converts the corpora to gold format (`convert_khpos.py`,
 `convert_alt.py`), splits off dev sets (`split.py`), builds dictionaries

@@ -4,7 +4,7 @@
 Nothing downloaded here is committed to the repository. Several sources are
 licensed CC BY-NC-SA; read the license notice printed for each one.
 
-    python scripts/fetch_data.py                 # everything except Wikipedia
+    python scripts/fetch_data.py                 # everything except Wikipedia and ICU binaries
     python scripts/fetch_data.py khpos alt       # only these
 """
 
@@ -47,6 +47,16 @@ SOURCES = {
         "files": {name: LBDICT + "src/" + name for name in
                   ["seafreq.txt", "villages.txt", "places.txt", "names.txt", "KHSV.txt", "KHOV.txt"]}
                  | {"LICENSE": LBDICT + "LICENSE"},
+    },
+    "icu-bin": {
+        "license": ("Unicode License v3. Official ICU 78.3 Windows build, only needed for the "
+                    "khseg-icu baseline on Windows; elsewhere install ICU from the system "
+                    "package manager. https://github.com/unicode-org/icu/releases"),
+        "files": {"icu4c-78.3-Win64-MSVC2022.zip":
+                  "https://github.com/unicode-org/icu/releases/download/release-78.3/"
+                  "icu4c-78.3-Win64-MSVC2022.zip"},
+        "unzip": "icu4c-78.3-Win64-MSVC2022.zip",
+        "optional": True,
     },
     "wiki": {
         "license": "CC BY-SA 4.0. https://dumps.wikimedia.org/kmwiki/",
