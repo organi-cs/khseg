@@ -4,6 +4,8 @@
 #include <khseg/segmenter.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <tuple>
 
 namespace khseg {
@@ -94,6 +96,59 @@ void backward_match(std::u32string_view text, const Dictionary& dict,
   std::reverse(out.begin() + static_cast<std::ptrdiff_t>(first), out.end());
 }
 
+// Viterbi over cluster boundaries. Edges are dictionary words that start and
+// end on a boundary (cost from the dictionary) and single clusters taken as
+// unknown (cost `unknown_cost`). Among paths of equal cost the one with fewer
+// tokens wins; after that the first path found wins, which is the one whose
+// last word is longest.
+void viterbi(std::u32string_view text, const Dictionary& dict, double unknown_cost, Workspace& ws,
+             std::vector<Token>& out) {
+  constexpr double kInf = std::numeric_limits<double>::infinity();
+  constexpr double kEps = 1e-9;
+  const RefTrie& trie = dict.forward();
+  const auto len = static_cast<std::uint32_t>(text.size());
+  const std::vector<std::uint8_t>& is_boundary = ws.is_boundary;
+
+  ws.best.assign(len + 1, kInf);
+  ws.ntokens.assign(len + 1, 0);
+  ws.back_from.assign(len + 1, 0);
+  ws.back_entry.assign(len + 1, kNoEntry);
+  ws.best[0] = 0.0;
+
+  auto relax = [&ws](std::uint32_t to, std::uint32_t from, double cost, std::uint32_t entry) {
+    const double c = ws.best[from] + cost;
+    const std::uint32_t n = ws.ntokens[from] + 1;
+    const double cur = ws.best[to];
+    if (c < cur - kEps || (std::abs(c - cur) <= kEps && n < ws.ntokens[to])) {
+      ws.best[to] = c;
+      ws.ntokens[to] = n;
+      ws.back_from[to] = from;
+      ws.back_entry[to] = entry;
+    }
+  };
+
+  for (std::uint32_t p = 0; p < len; ++p) {
+    if (!is_boundary[p] || ws.best[p] == kInf) continue;
+    std::uint32_t node = RefTrie::kRoot;
+    for (std::uint32_t q = p; q < len; ++q) {
+      node = trie.step(node, text[q]);
+      if (node == RefTrie::kNone) break;
+      const std::uint32_t id = trie.value(node);
+      if (id != RefTrie::kNone && is_boundary[q + 1]) relax(q + 1, p, dict.cost(id), id);
+    }
+    relax(next_boundary(is_boundary, p), p, unknown_cost, kNoEntry);
+  }
+
+  const std::size_t first = out.size();
+  for (std::uint32_t e = len; e > 0;) {
+    const std::uint32_t b = ws.back_from[e];
+    const std::uint32_t id = ws.back_entry[e];
+    out.push_back(piece(b, e, id == kNoEntry ? TokenType::Unknown : TokenType::Word, id));
+    e = b;
+  }
+  std::reverse(out.begin() + static_cast<std::ptrdiff_t>(first), out.end());
+}
+
 // Lower is better: fewer pieces, then fewer unknown clusters, then fewer
 // one-cluster words.
 std::tuple<std::size_t, std::size_t, std::size_t> bimm_score(
@@ -167,7 +222,9 @@ void Segmenter::segment_run(const Token& run, Workspace& ws, std::vector<Token>&
 
   ws.scratch.clear();
   switch (options_.algorithm) {
-    case Algorithm::Viterbi:  // implemented in the next milestone
+    case Algorithm::Viterbi:
+      viterbi(text, *dict_, unknown_cost_, ws, ws.scratch);
+      break;
     case Algorithm::Forward:
       forward_match(text, *dict_, ws.is_boundary, ws.scratch);
       break;

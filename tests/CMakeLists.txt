@@ -7,11 +7,14 @@ add_executable(khseg-tests
   unit/test_cluster.cpp
   unit/test_dictionary.cpp
   unit/test_format.cpp
+  unit/test_invariants.cpp
   unit/test_pretokenize.cpp
-  unit/test_segmenter.cpp)
+  unit/test_segmenter.cpp
+  unit/test_viterbi.cpp)
 target_link_libraries(khseg-tests PRIVATE khseg::khseg GTest::gtest_main)
 target_compile_definitions(khseg-tests PRIVATE
-  KHSEG_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+  KHSEG_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+  KHSEG_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 khseg_configure_target(khseg-tests)
 gtest_discover_tests(khseg-tests DISCOVERY_MODE PRE_TEST)
 
@@ -46,7 +49,7 @@ if(KHSEG_BUILD_TOOLS)
   khseg_golden(missing_dict INPUT mixed.txt RC 2 ARGS --dict no-such-dict.tsv)
 
   set(sample_dict ${PROJECT_SOURCE_DIR}/data/sample/dict.tsv)
-  foreach(algo fmm bmm bimm)
+  foreach(algo viterbi fmm bmm bimm)
     khseg_golden(sample_${algo} INPUT ../../data/sample/raw.txt EXPECTED ../../data/sample/gold.txt
       ARGS --dict ${sample_dict} --algo ${algo})
   endforeach()

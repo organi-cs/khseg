@@ -48,7 +48,8 @@ struct Workspace {
   std::vector<Token> coarse;
   std::vector<std::uint32_t> clusters;
   std::vector<std::uint8_t> is_boundary;
-  std::vector<double> best;
+  std::vector<double> best;  // Viterbi cost to reach each code point of the last run
+  std::vector<std::uint32_t> ntokens;
   std::vector<std::uint32_t> back_from;
   std::vector<std::uint32_t> back_entry;
   std::vector<Token> scratch;
