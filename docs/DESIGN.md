@@ -12,7 +12,8 @@ Changes from the plan made during implementation:
 - Dictionary words are stored in one flat UTF-32 buffer, including in the .khd file.
 - The normalizer reorders marks inside each cluster only, so it never changes the cluster count; offsets map back through the cluster index.
 - The ICU baseline is a separate tool, khseg-icu, rather than part of khseg-bench, so it can also write predictions for khseg-eval.
-- Not built: mmap loading, span-unknown edges and the bigram extension.
+- The binary format is at version 2: a section table and 8-byte aligned sections, so a .khd file is memory-mapped and used in place. The trie and dictionary hold spans plus a shared owner (heap buffers or the mapping).
+- Not built: span-unknown edges and the bigram extension.
 
 ---
 

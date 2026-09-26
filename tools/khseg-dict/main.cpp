@@ -41,6 +41,7 @@ int build(const std::string& in, const std::string& out, double alpha, std::opti
 
 int stats(const std::string& path) {
   const auto d = khseg::Dictionary::from_file(path);
+  std::printf("storage            %s\n", d.is_mapped() ? "memory-mapped file" : "in memory");
   std::printf("words              %zu\n", d.size());
   std::printf("total count        %.0f\n", d.total_count());
   std::printf("max cost           %.3f\n", d.max_cost());

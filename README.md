@@ -113,6 +113,12 @@ for (const auto& t : tokens) {
 }
 ```
 
+`Dictionary::from_file` memory-maps a `.khd` file (`Dictionary::map_file`
+does so directly; pass `verify_checksum = false` to skip reading every page
+for the checksum). Copies of a `Dictionary` share the mapping, which lasts
+until the last copy is gone. On Windows a mapped file cannot be overwritten
+or deleted while it is in use.
+
 `Dictionary` and `Segmenter` do not change after construction, so one
 instance can be shared by any number of threads, each with its own
 `Workspace`. The library never prints; loading problems go into a
@@ -212,7 +218,10 @@ cost(w) = -ln( (count(w) + alpha) / (N + alpha * V) )
 where N is the total count, V the number of words and alpha 0.5. Words are
 stored in a double-array trie over a 130-symbol alphabet (the Khmer block plus
 ZWJ and ZWNJ); a lookup step is two array reads. `khseg-dict build` writes a
-binary `.khd` file that loads 10 to 25 times faster than the TSV.
+binary `.khd` file whose arrays are 8-byte aligned, so it is memory-mapped
+and used in place: loading a 94,000-word dictionary takes 3 to 11 ms
+instead of about 510 ms for the TSV, and processes that load the same file
+share its memory.
 
 ### Maximal matching
 
@@ -415,7 +424,8 @@ Speed, single thread, Ryzen 5 5600H, GCC 13
 
 The command line tool processes a 50 MB file in about 1.5 s including I/O
 with one thread, and in 0.44 s with `-j 12` (115 MB/s). The binary
-dictionary loads in 20 to 60 ms against about 520 ms for the TSV.
+dictionary is memory-mapped and loads in 3 ms (9 to 11 ms with its
+checksum checked) against about 510 ms for the TSV.
 
 ## Tools
 
@@ -457,7 +467,7 @@ khseg-bench -d khmer.khd -i corpus.txt --min-mb 100 --repeat 5 --csv results.csv
 
 ## Testing
 
-`ctest` runs 145 C++ tests, plus 11 Python tests when the bindings are
+`ctest` runs 152 C++ tests, plus 11 Python tests when the bindings are
 built:
 
 - UTF-8 decoding, including every class of malformed input.
@@ -468,7 +478,9 @@ built:
 - The worked example above.
 - A property test that the double-array trie agrees with a simple reference
   trie on 100,000 random queries.
-- Binary dictionary round trips and corruption checks.
+- Binary dictionary round trips, memory-mapped loading (including copies
+  that outlive the original), and corruption checks with and without the
+  checksum.
 - Mark normalization: fixed cases, plus 5,000 random strings checked for
   idempotence and unchanged cluster count.
 - Golden-file tests of the command line tools, including that `-j` output

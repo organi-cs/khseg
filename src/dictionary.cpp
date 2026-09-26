@@ -148,16 +148,25 @@ struct Dictionary::Builder {
     d.format_ = format;
     d.unknown_cost_ = options.unknown_cost ? options.unknown_cost : unknown_cost;
     const std::size_t n = words.size();
-    d.counts_.resize(n);
-    d.costs_.resize(n);
+
+    struct Storage {
+      std::u32string blob;
+      std::vector<std::uint32_t> offsets{0};
+      std::vector<double> counts, costs;
+    };
+    auto store = std::make_shared<Storage>();
+    store->counts.resize(n);
+    store->costs.resize(n);
+    auto& counts = store->counts;
+    auto& costs = store->costs;
 
     if (format == ValueFormat::Count) {
       double total = 0;
       for (const auto& v : values) total += v.value_or(0.0);
       const double denom = total + options.alpha * static_cast<double>(n);
       for (std::size_t i = 0; i < n; ++i) {
-        d.counts_[i] = values[i].value_or(0.0);
-        d.costs_[i] = -std::log((d.counts_[i] + options.alpha) / denom);
+        counts[i] = values[i].value_or(0.0);
+        costs[i] = -std::log((counts[i] + options.alpha) / denom);
       }
       d.total_ = total;
     } else {
@@ -166,26 +175,29 @@ struct Dictionary::Builder {
         if (v) worst = std::max(worst, -*v);
       }
       for (std::size_t i = 0; i < n; ++i) {
-        d.counts_[i] = 0;
-        d.costs_[i] = values[i] ? -*values[i] : worst;
+        counts[i] = 0;
+        costs[i] = values[i] ? -*values[i] : worst;
       }
     }
 
     RefTrie fwd, bwd;
     for (std::size_t i = 0; i < n; ++i) {
       const auto id = static_cast<std::uint32_t>(i);
-      d.max_cost_ = std::max(d.max_cost_, d.costs_[i]);
+      d.max_cost_ = std::max(d.max_cost_, costs[i]);
       d.max_len_ = std::max(d.max_len_, words[i].size());
       fwd.insert(words[i], id);
       std::u32string rev(words[i].rbegin(), words[i].rend());
       bwd.insert(rev, id);
+      store->blob += words[i];
+      store->offsets.push_back(static_cast<std::uint32_t>(store->blob.size()));
     }
     d.forward_ = DoubleArrayTrie::build(fwd);
     d.backward_ = DoubleArrayTrie::build(bwd);
-    for (const auto& w : words) {
-      d.word_blob_ += w;
-      d.word_offsets_.push_back(static_cast<std::uint32_t>(d.word_blob_.size()));
-    }
+    d.word_blob_ = store->blob;
+    d.word_offsets_ = store->offsets;
+    d.counts_ = store->counts;
+    d.costs_ = store->costs;
+    d.storage_ = std::move(store);
     if (report) report->entries = n;
     return d;
   }

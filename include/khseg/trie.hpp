@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -53,6 +55,9 @@ class KHSEG_EXPORT RefTrie {
 //
 // A transition from node s on symbol c goes to t = base[s] + c and exists
 // when check[t] == s. Lookups are two array reads and a compare.
+//
+// The arrays are held as spans plus a shared owner, so they can live in the
+// trie's own buffers or in a memory-mapped file. Copies share the arrays.
 class KHSEG_EXPORT DoubleArrayTrie {
  public:
   static constexpr std::uint32_t kRoot = 0;
@@ -72,11 +77,15 @@ class KHSEG_EXPORT DoubleArrayTrie {
   // std::invalid_argument if a key uses a code point outside the alphabet.
   static DoubleArrayTrie build(const RefTrie& ref);
 
-  // Rebuilds from raw arrays, e.g. read from a file. The arrays must have the
-  // same size; returns false (and leaves the trie empty) when they do not
-  // describe a consistent trie.
+  // Takes over raw arrays. They must be non-empty and of equal size, and
+  // check[0] must be kNone; otherwise returns false and leaves the trie empty.
+  // Lookups stay in bounds for any array contents, so no deeper check is needed.
   bool assign(std::vector<std::uint32_t> base, std::vector<std::uint32_t> check,
               std::vector<std::uint32_t> value);
+
+  // Same, but uses arrays owned elsewhere; `owner` keeps them alive.
+  bool assign_view(std::span<const std::uint32_t> base, std::span<const std::uint32_t> check,
+                   std::span<const std::uint32_t> value, std::shared_ptr<const void> owner);
 
   std::uint32_t step(std::uint32_t node, char32_t c) const noexcept {
     const std::uint32_t code = symbol(c);
@@ -92,14 +101,15 @@ class KHSEG_EXPORT DoubleArrayTrie {
   std::size_t size() const noexcept { return check_.size(); }
   std::size_t memory_bytes() const noexcept { return size() * 3 * sizeof(std::uint32_t); }
 
-  const std::vector<std::uint32_t>& base_array() const noexcept { return base_; }
-  const std::vector<std::uint32_t>& check_array() const noexcept { return check_; }
-  const std::vector<std::uint32_t>& value_array() const noexcept { return value_; }
+  std::span<const std::uint32_t> base_array() const noexcept { return base_; }
+  std::span<const std::uint32_t> check_array() const noexcept { return check_; }
+  std::span<const std::uint32_t> value_array() const noexcept { return value_; }
 
  private:
-  std::vector<std::uint32_t> base_;
-  std::vector<std::uint32_t> check_;
-  std::vector<std::uint32_t> value_;
+  std::shared_ptr<const void> owner_;
+  std::span<const std::uint32_t> base_;
+  std::span<const std::uint32_t> check_;
+  std::span<const std::uint32_t> value_;
 };
 
 }  // namespace khseg

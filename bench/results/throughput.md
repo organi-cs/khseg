@@ -54,14 +54,24 @@ Before normalization was added (commit 51ba654) the same benchmark gave
 dictionary. Checking every cluster for canonical order costs about 10% for
 Viterbi and about 20% for maximal matching; `--no-normalize` turns it off.
 
-## Dictionary loading (94,060 words)
+## Dictionary loading (93,572 words after normalization)
 
-| Format | Time |
+Best of 5, from `khseg-bench`, file in the OS cache:
+
+| Method | Time |
 |---|---|
-| TSV (parse, validate, normalize, build both tries) | about 520 ms |
-| binary `.khd` (read, checksum, validate) | 20 to 60 ms |
+| TSV: parse, validate, normalize, build both tries | 506 ms |
+| `.khd` bytes already in memory: copy, checksum, validate | 6 ms |
+| `.khd` memory-mapped, checksum checked | 9 to 11 ms |
+| `.khd` memory-mapped, no checksum | 3 ms |
 
-The binary file is 13 MB, most of it the two double-array tries (7.5 MiB).
+The binary file is 13 MB, most of it the two double-array tries. Mapping
+it copies nothing; the time left without the checksum is the structural
+check that every trie value is a valid word id, which keeps a damaged file
+from causing out-of-bounds reads. With the checksum every page is read once,
+and the page faults make that slower than hashing an in-memory copy.
+Before memory mapping (format version 1, commit 51ba654) loading the binary
+file took 20 to 60 ms.
 
 ## End to end
 

@@ -6,7 +6,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -41,6 +43,10 @@ struct DictionaryOptions {
   // Store words with their marks in canonical order (see normalize.hpp), so
   // that differently typed spellings of one word become one entry.
   bool normalize = true;
+  // For binary files: check the FNV-1a checksum over the whole file. This reads
+  // every page once; turn it off to load a trusted file in constant time.
+  // Structural checks that keep lookups in bounds always run.
+  bool verify_checksum = true;
 };
 
 // Word list with unigram costs. Build it from a TSV file:
@@ -62,11 +68,24 @@ class KHSEG_EXPORT Dictionary {
   static Dictionary from_tsv_file(const std::filesystem::path& path, LoadReport* report = nullptr,
                                   DictionaryOptions options = {});
   // Reads a TSV file or a binary .khd file, telling them apart by content.
-  // For a binary file `report` only gets the entry count and `options.alpha`
-  // is ignored, because costs are stored precomputed.
+  // A binary file is memory-mapped (see map_file). For a binary file `report`
+  // only gets the entry count, and alpha and normalize are ignored because
+  // the file stores finished costs and normalized words.
   static Dictionary from_file(const std::filesystem::path& path, LoadReport* report = nullptr,
                               DictionaryOptions options = {});
-  static Dictionary from_binary(std::string_view bytes);
+
+  // Copies `bytes` (the contents of a .khd file) into memory it owns.
+  static Dictionary from_binary(std::string_view bytes, bool verify_checksum = true);
+
+  // Maps a .khd file read-only and uses its arrays in place, without copying.
+  // Loading costs a few page faults instead of reading the whole file, and
+  // processes that map the same file share its pages. The mapping lives as
+  // long as the Dictionary or any copy of it. While it is mapped, Windows
+  // will not let the file be replaced or deleted.
+  static Dictionary map_file(const std::filesystem::path& path, bool verify_checksum = true);
+
+  // True when the arrays live in a memory-mapped file.
+  bool is_mapped() const noexcept { return mapped_; }
 
   // Binary format: see the comment at the top of src/dictionary_io.cpp.
   // Throws std::runtime_error on failure.
@@ -79,7 +98,7 @@ class KHSEG_EXPORT Dictionary {
 
   std::size_t size() const noexcept { return word_offsets_.size() - 1; }
   std::u32string_view word(std::uint32_t id) const noexcept {
-    return std::u32string_view(word_blob_).substr(word_offsets_[id], word_offsets_[id + 1] - word_offsets_[id]);
+    return {word_blob_.data() + word_offsets_[id], word_offsets_[id + 1] - word_offsets_[id]};
   }
   double count(std::uint32_t id) const noexcept { return counts_[id]; }
   double cost(std::uint32_t id) const noexcept { return costs_[id]; }
@@ -101,12 +120,20 @@ class KHSEG_EXPORT Dictionary {
 
  private:
   struct Builder;
+  static Dictionary parse_binary(const char* data, std::size_t size,
+                                 std::shared_ptr<const void> owner, bool verify_checksum);
 
+  static constexpr std::uint32_t kNoOffsets[1] = {0};
+
+  // The arrays below point into `storage_`: either buffers owned by this
+  // dictionary or a mapped file. Copies of a Dictionary share them.
+  std::shared_ptr<const void> storage_;
+  bool mapped_ = false;
   // All words back to back; word i is [word_offsets_[i], word_offsets_[i + 1]).
-  std::u32string word_blob_;
-  std::vector<std::uint32_t> word_offsets_{0};
-  std::vector<double> counts_;
-  std::vector<double> costs_;
+  std::span<const char32_t> word_blob_;
+  std::span<const std::uint32_t> word_offsets_{kNoOffsets};
+  std::span<const double> counts_;
+  std::span<const double> costs_;
   double total_ = 0.0;
   double max_cost_ = 0.0;
   std::size_t max_len_ = 0;

@@ -91,10 +91,12 @@ class PySegmenter {
 };
 
 std::shared_ptr<const khseg::Dictionary> load(const std::string& path, double alpha,
-                                              std::optional<double> unknown_cost) {
+                                              std::optional<double> unknown_cost,
+                                              bool verify_checksum = true) {
   khseg::DictionaryOptions o;
   o.alpha = alpha;
   o.unknown_cost = unknown_cost;
+  o.verify_checksum = verify_checksum;
   return std::make_shared<const khseg::Dictionary>(khseg::Dictionary::from_file(path, nullptr, o));
 }
 
@@ -107,11 +109,15 @@ PYBIND11_MODULE(_khseg, m) {
   py::class_<khseg::Dictionary, std::shared_ptr<khseg::Dictionary>>(m, "Dictionary")
       .def_static(
           "load",
-          [](const std::string& path, double alpha, std::optional<double> unknown_cost) {
-            return std::const_pointer_cast<khseg::Dictionary>(load(path, alpha, unknown_cost));
+          [](const std::string& path, double alpha, std::optional<double> unknown_cost,
+             bool verify_checksum) {
+            return std::const_pointer_cast<khseg::Dictionary>(
+                load(path, alpha, unknown_cost, verify_checksum));
           },
           py::arg("path"), py::arg("alpha") = 0.5, py::arg("unknown_cost") = py::none(),
-          "Load a TSV or binary .khd dictionary.")
+          py::arg("verify_checksum") = true,
+          "Load a TSV dictionary, or memory-map a binary .khd dictionary.")
+      .def_property_readonly("is_mapped", &khseg::Dictionary::is_mapped)
       .def("__len__", &khseg::Dictionary::size)
       .def("__contains__",
            [](const khseg::Dictionary& d, const std::string& w) {

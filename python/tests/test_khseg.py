@@ -90,9 +90,15 @@ class SegmenterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "sample.khd")
             self.dictionary.save_binary(path)
-            again = khseg.Dictionary.load(path)
-            self.assertEqual(len(again), len(self.dictionary))
-            self.assertEqual(khseg.Segmenter(again).segment(SENTENCE), self.seg.segment(SENTENCE))
+            for verify in (True, False):
+                again = khseg.Dictionary.load(path, verify_checksum=verify)
+                self.assertTrue(again.is_mapped)
+                self.assertEqual(len(again), len(self.dictionary))
+                seg = khseg.Segmenter(again)
+                self.assertEqual(seg.segment(SENTENCE), self.seg.segment(SENTENCE))
+                # Windows keeps a mapped file locked; release it before cleanup.
+                del seg, again
+        self.assertFalse(self.dictionary.is_mapped)
 
     def test_threads(self):
         # segment() releases the GIL; every thread must get the same answers.

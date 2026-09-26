@@ -44,24 +44,33 @@ std::uint32_t RefTrie::find(std::u32string_view key) const noexcept {
   return value(node);
 }
 
-DoubleArrayTrie::DoubleArrayTrie() : base_(1, 0), check_(1, kNone), value_(1, kNone) {}
+namespace {
+
+// The one-slot trie every default-constructed DoubleArrayTrie points at.
+constexpr std::uint32_t kEmptyBase[1] = {0};
+constexpr std::uint32_t kEmptyNone[1] = {DoubleArrayTrie::kNone};
+
+struct OwnedArrays {
+  std::vector<std::uint32_t> base, check, value;
+};
+
+}  // namespace
+
+DoubleArrayTrie::DoubleArrayTrie() : base_(kEmptyBase), check_(kEmptyNone), value_(kEmptyNone) {}
 
 DoubleArrayTrie DoubleArrayTrie::build(const RefTrie& ref) {
-  DoubleArrayTrie t;
   std::size_t cap = std::max<std::size_t>(256, ref.node_count() * 2);
-  t.base_.assign(cap, 0);
-  t.check_.assign(cap, kNone);
-  t.value_.assign(cap, kNone);
+  std::vector<std::uint32_t> base(cap, 0), check(cap, kNone), value(cap, kNone);
   std::vector<std::uint8_t> used(cap, 0);
   used[0] = 1;
-  t.value_[0] = ref.value(RefTrie::kRoot);
+  value[0] = ref.value(RefTrie::kRoot);
 
   auto grow = [&](std::size_t need) {
     if (need < cap) return;
     while (cap <= need) cap *= 2;
-    t.base_.resize(cap, 0);
-    t.check_.resize(cap, kNone);
-    t.value_.resize(cap, kNone);
+    base.resize(cap, 0);
+    check.resize(cap, kNone);
+    value.resize(cap, kNone);
     used.resize(cap, 0);
   };
 
@@ -104,37 +113,46 @@ DoubleArrayTrie DoubleArrayTrie::build(const RefTrie& ref) {
       while (pos < cap && used[pos]);
     }
 
-    t.base_[slot] = static_cast<std::uint32_t>(b);
+    base[slot] = static_cast<std::uint32_t>(b);
     for (std::size_t k = 0; k < kids.size(); ++k) {
       const std::size_t s = b + codes[k];
       used[s] = 1;
-      t.check_[s] = slot;
-      t.value_[s] = ref.value(kids[k].second);
+      check[s] = slot;
+      value[s] = ref.value(kids[k].second);
       top = std::max(top, s);
       queue.emplace_back(kids[k].second, static_cast<std::uint32_t>(s));
     }
   }
 
-  t.base_.resize(top + 1);
-  t.check_.resize(top + 1);
-  t.value_.resize(top + 1);
+  base.resize(top + 1);
+  check.resize(top + 1);
+  value.resize(top + 1);
+  DoubleArrayTrie t;
+  t.assign(std::move(base), std::move(check), std::move(value));
   return t;
 }
 
 bool DoubleArrayTrie::assign(std::vector<std::uint32_t> base, std::vector<std::uint32_t> check,
                              std::vector<std::uint32_t> value) {
+  auto arrays = std::make_shared<OwnedArrays>(
+      OwnedArrays{std::move(base), std::move(check), std::move(value)});
+  const auto* a = arrays.get();
+  return assign_view(a->base, a->check, a->value, std::move(arrays));
+}
+
+bool DoubleArrayTrie::assign_view(std::span<const std::uint32_t> base,
+                                  std::span<const std::uint32_t> check,
+                                  std::span<const std::uint32_t> value,
+                                  std::shared_ptr<const void> owner) {
   const std::size_t n = check.size();
-  bool ok = n > 0 && base.size() == n && value.size() == n && check[0] == kNone;
-  for (std::size_t i = 1; ok && i < n; ++i) {
-    if (check[i] != kNone && (check[i] >= n || base[check[i]] >= i)) ok = false;
-  }
-  if (!ok) {
+  if (n == 0 || base.size() != n || value.size() != n || check[0] != kNone) {
     *this = DoubleArrayTrie();
     return false;
   }
-  base_ = std::move(base);
-  check_ = std::move(check);
-  value_ = std::move(value);
+  owner_ = std::move(owner);
+  base_ = base;
+  check_ = check;
+  value_ = value;
   return true;
 }
 

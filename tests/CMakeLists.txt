@@ -64,6 +64,14 @@ if(KHSEG_BUILD_TOOLS)
     ARGS --dict ${sample_dict} -j 3)
   khseg_golden(mixed_json_threads INPUT mixed.txt EXPECTED mixed.nodict.json.txt ARGS --json -j 2)
 
+  # Build a binary dictionary, then segment through the memory-mapped file.
+  add_test(NAME cli.dict_build
+    COMMAND khseg-dict build ${sample_dict} -o ${CMAKE_CURRENT_BINARY_DIR}/cli-out/sample.khd)
+  set_tests_properties(cli.dict_build PROPERTIES FIXTURES_SETUP sample_khd)
+  khseg_golden(sample_khd INPUT ../../data/sample/raw.txt EXPECTED ../../data/sample/gold.txt
+    ARGS --dict ${CMAKE_CURRENT_BINARY_DIR}/cli-out/sample.khd)
+  set_tests_properties(cli.sample_khd PROPERTIES FIXTURES_REQUIRED sample_khd)
+
   set(sample_gold ${PROJECT_SOURCE_DIR}/data/sample/gold.txt)
   khseg_golden(eval_sample TOOL khseg-eval INPUT mixed.txt EXPECTED eval_sample.txt
     ARGS --gold ${sample_gold} --dict ${sample_dict} --no-merge-unknown --bootstrap 200 --dump-errors 5)

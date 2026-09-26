@@ -1,152 +1,132 @@
-// Binary dictionary format (.khd), little endian:
+// Binary dictionary format (.khd), version 2, in host byte order (a marker
+// field rejects files from machines with the other order):
 //
-//   char[8]  magic "KHSEGDIC"
-//   u32      version (1)
-//   u32      byte order mark 0x01020304, written in host order
-//   u32      value format (0 count, 1 logprob)
-//   u32      flags (bit 0: unknown cost present)
-//   f64      unknown cost
-//   f64      total count
-//   f64      max cost
-//   u64      max word length (code points)
-//   u64      number of words n
-//   u32[n+1] offsets into the word blob, in code points
-//   u32[m]   the words back to back as UTF-32, m = offsets[n]
-//   f64[n]   counts
-//   f64[n]   costs
-//   2 x trie (forward, then backward): u64 size m, u32[m] base, check, value
-//   u64      FNV-1a hash of every byte before it
+//   offset  field
+//        0  char[8]  magic "KHSEGDIC"
+//        8  u32      version (2)
+//       12  u32      byte order mark 0x01020304
+//       16  u32      value format (0 count, 1 logprob)
+//       20  u32      flags (bit 0: unknown cost present)
+//       24  f64      unknown cost
+//       32  f64      total count
+//       40  f64      max cost
+//       48  u64      max word length (code points)
+//       56  u64      number of words n
+//       64  u64      number of sections (10)
+//       72  10 x {u64 byte offset, u64 element count}, one per section:
+//             0 u32[n+1] word offsets (code points)   5 u32 forward check
+//             1 u32[m]   words as UTF-32              6 u32 forward value
+//             2 f64[n]   counts                       7 u32 backward base
+//             3 f64[n]   costs                        8 u32 backward check
+//             4 u32      forward base                 9 u32 backward value
+//      232  sections, each starting at a multiple of 8 bytes
+//   last 8  u64 checksum: FNV-1a over the preceding bytes taken as 64-bit
+//           words (a final partial word is zero padded)
 //
-// The file is read in one piece and every read is bounds checked, so a
-// truncated or corrupted file gives an error instead of a crash.
+// Every section starts 8-byte aligned, so a mapped file (page aligned) or an
+// aligned heap copy can be used in place without copying the arrays.
+//
+// Loading always checks the header, that every section lies inside the file,
+// that word offsets increase, and that trie values are valid word ids, so a
+// damaged file cannot cause out-of-bounds reads. The checksum is optional.
 #include <khseg/dictionary.hpp>
 
 #include <cstring>
 #include <fstream>
-#include <iterator>
-#include <sstream>
 #include <stdexcept>
+
+#include "mapped_file.hpp"
 
 namespace khseg {
 
 namespace {
 
 constexpr char kMagic[8] = {'K', 'H', 'S', 'E', 'G', 'D', 'I', 'C'};
-constexpr std::uint32_t kVersion = 1;
+constexpr std::uint32_t kVersion = 2;
 constexpr std::uint32_t kByteOrder = 0x01020304;
+constexpr std::size_t kSections = 10;
+constexpr std::size_t kTableOffset = 72;
+constexpr std::size_t kHeaderSize = kTableOffset + kSections * 16;
 
-std::uint64_t fnv1a(std::string_view bytes) {
+std::uint64_t checksum(const char* data, std::size_t size) {
   std::uint64_t h = 0xcbf29ce484222325ull;
-  for (char c : bytes) {
-    h ^= static_cast<unsigned char>(c);
-    h *= 0x100000001b3ull;
+  std::size_t i = 0;
+  for (; i + 8 <= size; i += 8) {
+    std::uint64_t w;
+    std::memcpy(&w, data + i, 8);
+    h = (h ^ w) * 0x100000001b3ull;
+  }
+  if (i < size) {
+    std::uint64_t w = 0;
+    std::memcpy(&w, data + i, size - i);
+    h = (h ^ w) * 0x100000001b3ull;
   }
   return h;
 }
 
-class Writer {
- public:
-  template <class T>
-  void put(const T& v) {
-    const auto* p = reinterpret_cast<const char*>(&v);
-    out_.append(p, sizeof(T));
-  }
-  template <class T>
-  void put_array(const std::vector<T>& v) {
-    if (!v.empty()) out_.append(reinterpret_cast<const char*>(v.data()), v.size() * sizeof(T));
-  }
-  void put_bytes(std::string_view s) { out_.append(s); }
-  std::string& str() { return out_; }
+[[noreturn]] void corrupt() { throw std::runtime_error("binary dictionary is truncated or corrupt"); }
 
- private:
-  std::string out_;
-};
-
-class Reader {
- public:
-  explicit Reader(std::string_view data) : data_(data) {}
-
-  template <class T>
-  T get() {
-    T v;
-    std::memcpy(&v, take(sizeof(T)).data(), sizeof(T));
-    return v;
-  }
-  template <class T>
-  std::vector<T> get_array(std::uint64_t n) {
-    if (n > data_.size() / sizeof(T)) fail();
-    std::vector<T> v(static_cast<std::size_t>(n));
-    const auto bytes = take(static_cast<std::size_t>(n) * sizeof(T));
-    if (n) std::memcpy(v.data(), bytes.data(), bytes.size());
-    return v;
-  }
-  std::string_view take(std::size_t n) {
-    if (n > data_.size() - pos_) fail();
-    auto s = data_.substr(pos_, n);
-    pos_ += n;
-    return s;
-  }
-  std::size_t pos() const { return pos_; }
-
-  [[noreturn]] static void fail() { throw std::runtime_error("binary dictionary is truncated or corrupt"); }
-
- private:
-  std::string_view data_;
-  std::size_t pos_ = 0;
-};
-
-void put_trie(Writer& w, const DoubleArrayTrie& t) {
-  w.put<std::uint64_t>(t.size());
-  w.put_array(t.base_array());
-  w.put_array(t.check_array());
-  w.put_array(t.value_array());
+template <class T>
+T read_at(const char* data, std::size_t offset) {
+  T v;
+  std::memcpy(&v, data + offset, sizeof(T));
+  return v;
 }
 
-DoubleArrayTrie get_trie(Reader& r) {
-  const auto m = r.get<std::uint64_t>();
-  auto base = r.get_array<std::uint32_t>(m);
-  auto check = r.get_array<std::uint32_t>(m);
-  auto value = r.get_array<std::uint32_t>(m);
-  DoubleArrayTrie t;
-  if (!t.assign(std::move(base), std::move(check), std::move(value))) Reader::fail();
-  return t;
+template <class T>
+void write_at(std::string& out, std::size_t offset, const T& v) {
+  std::memcpy(out.data() + offset, &v, sizeof(T));
 }
 
 bool has_magic(std::string_view bytes) {
   return bytes.size() >= sizeof kMagic && std::memcmp(bytes.data(), kMagic, sizeof kMagic) == 0;
 }
 
-std::string read_file(const std::filesystem::path& path) {
+bool file_has_magic(const std::filesystem::path& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) throw std::runtime_error("cannot open dictionary " + path.string());
-  std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  if (in.bad()) throw std::runtime_error("error reading dictionary " + path.string());
-  return data;
+  char head[sizeof kMagic] = {};
+  in.read(head, sizeof head);
+  return in.gcount() == sizeof head && std::memcmp(head, kMagic, sizeof kMagic) == 0;
 }
 
 }  // namespace
 
 std::string Dictionary::to_binary() const {
-  Writer w;
-  w.put_bytes(std::string_view(kMagic, sizeof kMagic));
-  w.put(kVersion);
-  w.put(kByteOrder);
-  w.put<std::uint32_t>(format_ == ValueFormat::LogProb ? 1 : 0);
-  w.put<std::uint32_t>(unknown_cost_ ? 1 : 0);
-  w.put<double>(unknown_cost_.value_or(0.0));
-  w.put(total_);
-  w.put(max_cost_);
-  w.put<std::uint64_t>(max_len_);
-  w.put<std::uint64_t>(size());
-  w.put_array(word_offsets_);
-  w.put_bytes(std::string_view(reinterpret_cast<const char*>(word_blob_.data()),
-                               word_blob_.size() * sizeof(char32_t)));
-  w.put_array(counts_);
-  w.put_array(costs_);
-  put_trie(w, forward_);
-  put_trie(w, backward_);
-  w.put(fnv1a(w.str()));
-  return std::move(w.str());
+  std::string out(kHeaderSize, '\0');
+  std::memcpy(out.data(), kMagic, sizeof kMagic);
+  write_at(out, 8, kVersion);
+  write_at(out, 12, kByteOrder);
+  write_at<std::uint32_t>(out, 16, format_ == ValueFormat::LogProb ? 1 : 0);
+  write_at<std::uint32_t>(out, 20, unknown_cost_ ? 1 : 0);
+  write_at<double>(out, 24, unknown_cost_.value_or(0.0));
+  write_at(out, 32, total_);
+  write_at(out, 40, max_cost_);
+  write_at<std::uint64_t>(out, 48, max_len_);
+  write_at<std::uint64_t>(out, 56, size());
+  write_at<std::uint64_t>(out, 64, kSections);
+
+  std::size_t k = 0;
+  auto section = [&](auto span) {
+    while (out.size() % 8 != 0) out.push_back('\0');
+    write_at<std::uint64_t>(out, kTableOffset + k * 16, out.size());
+    write_at<std::uint64_t>(out, kTableOffset + k * 16 + 8, span.size());
+    out.append(reinterpret_cast<const char*>(span.data()), span.size_bytes());
+    ++k;
+  };
+  section(word_offsets_);
+  section(word_blob_);
+  section(counts_);
+  section(costs_);
+  for (const DoubleArrayTrie* t : {&forward_, &backward_}) {
+    section(t->base_array());
+    section(t->check_array());
+    section(t->value_array());
+  }
+  while (out.size() % 8 != 0) out.push_back('\0');
+  const std::uint64_t sum = checksum(out.data(), out.size());
+  out.append(reinterpret_cast<const char*>(&sum), sizeof sum);
+  return out;
 }
 
 void Dictionary::save_binary(const std::filesystem::path& path) const {
@@ -157,62 +137,93 @@ void Dictionary::save_binary(const std::filesystem::path& path) const {
   if (!out) throw std::runtime_error("error writing " + path.string());
 }
 
-Dictionary Dictionary::from_binary(std::string_view bytes) {
-  if (!has_magic(bytes)) throw std::runtime_error("not a khseg binary dictionary");
-  if (bytes.size() < sizeof kMagic + sizeof(std::uint64_t)) Reader::fail();
-  const std::string_view body = bytes.substr(0, bytes.size() - sizeof(std::uint64_t));
-  std::uint64_t stored = 0;
-  std::memcpy(&stored, bytes.data() + body.size(), sizeof stored);
-  if (stored != fnv1a(body)) throw std::runtime_error("binary dictionary checksum mismatch");
-
-  Reader r(body);
-  r.take(sizeof kMagic);
-  if (r.get<std::uint32_t>() != kVersion) {
-    throw std::runtime_error("binary dictionary has an unsupported version; rebuild it");
+Dictionary Dictionary::parse_binary(const char* data, std::size_t size,
+                                    std::shared_ptr<const void> owner, bool verify_checksum) {
+  if (!has_magic(std::string_view(data, size))) throw std::runtime_error("not a khseg binary dictionary");
+  if (size < kHeaderSize + 8) corrupt();
+  if (read_at<std::uint32_t>(data, 8) != kVersion) {
+    throw std::runtime_error("binary dictionary has an unsupported version; rebuild it with khseg-dict");
   }
-  if (r.get<std::uint32_t>() != kByteOrder) {
+  if (read_at<std::uint32_t>(data, 12) != kByteOrder) {
     throw std::runtime_error("binary dictionary was written on a machine with other byte order");
   }
+  const std::size_t body = size - 8;
+  if (verify_checksum && checksum(data, body) != read_at<std::uint64_t>(data, body)) {
+    throw std::runtime_error("binary dictionary checksum mismatch");
+  }
+  if (read_at<std::uint64_t>(data, 64) != kSections) corrupt();
+
+  const auto n = read_at<std::uint64_t>(data, 56);
+  if (n >= 0xFFFFFFFFull) corrupt();
+
+  // Section k as a span of T, after checking alignment and bounds.
+  auto section = [&]<class T>(std::size_t k, T*) -> std::span<const T> {
+    const auto offset = read_at<std::uint64_t>(data, kTableOffset + k * 16);
+    const auto count = read_at<std::uint64_t>(data, kTableOffset + k * 16 + 8);
+    if (offset % 8 != 0 || offset < kHeaderSize || offset > body || count > (body - offset) / sizeof(T)) {
+      corrupt();
+    }
+    return {reinterpret_cast<const T*>(data + offset), static_cast<std::size_t>(count)};
+  };
 
   Dictionary d;
-  d.format_ = r.get<std::uint32_t>() == 1 ? ValueFormat::LogProb : ValueFormat::Count;
-  const auto flags = r.get<std::uint32_t>();
-  const auto unk = r.get<double>();
-  if (flags & 1u) d.unknown_cost_ = unk;
-  d.total_ = r.get<double>();
-  d.max_cost_ = r.get<double>();
-  d.max_len_ = static_cast<std::size_t>(r.get<std::uint64_t>());
-  const auto n = r.get<std::uint64_t>();
-  if (n >= 0xFFFFFFFFull) Reader::fail();
-  d.word_offsets_ = r.get_array<std::uint32_t>(n + 1);
-  if (d.word_offsets_.front() != 0) Reader::fail();
+  d.format_ = read_at<std::uint32_t>(data, 16) == 1 ? ValueFormat::LogProb : ValueFormat::Count;
+  if (read_at<std::uint32_t>(data, 20) & 1u) d.unknown_cost_ = read_at<double>(data, 24);
+  d.total_ = read_at<double>(data, 32);
+  d.max_cost_ = read_at<double>(data, 40);
+  d.max_len_ = static_cast<std::size_t>(read_at<std::uint64_t>(data, 48));
+
+  d.word_offsets_ = section(0, static_cast<std::uint32_t*>(nullptr));
+  d.word_blob_ = section(1, static_cast<char32_t*>(nullptr));
+  d.counts_ = section(2, static_cast<double*>(nullptr));
+  d.costs_ = section(3, static_cast<double*>(nullptr));
+  if (d.word_offsets_.size() != n + 1 || d.counts_.size() != n || d.costs_.size() != n) corrupt();
+  if (d.word_offsets_.front() != 0 || d.word_offsets_.back() != d.word_blob_.size()) corrupt();
   for (std::size_t i = 0; i < n; ++i) {
-    if (d.word_offsets_[i] > d.word_offsets_[i + 1]) Reader::fail();
+    if (d.word_offsets_[i] > d.word_offsets_[i + 1]) corrupt();
   }
-  const auto blob = r.get_array<char32_t>(d.word_offsets_.back());
-  d.word_blob_.assign(blob.begin(), blob.end());
-  d.counts_ = r.get_array<double>(n);
-  d.costs_ = r.get_array<double>(n);
-  d.forward_ = get_trie(r);
-  d.backward_ = get_trie(r);
-  if (r.pos() != body.size()) Reader::fail();
-  for (auto v : d.forward_.value_array()) {
-    if (v != DoubleArrayTrie::kNone && v >= n) Reader::fail();
+
+  auto* const u32 = static_cast<std::uint32_t*>(nullptr);
+  DoubleArrayTrie* tries[2] = {&d.forward_, &d.backward_};
+  for (std::size_t t = 0; t < 2; ++t) {
+    const auto base = section(4 + t * 3, u32);
+    const auto check = section(5 + t * 3, u32);
+    const auto value = section(6 + t * 3, u32);
+    if (!tries[t]->assign_view(base, check, value, owner)) corrupt();
+    for (std::uint32_t v : value) {
+      if (v != DoubleArrayTrie::kNone && v >= n) corrupt();
+    }
   }
-  for (auto v : d.backward_.value_array()) {
-    if (v != DoubleArrayTrie::kNone && v >= n) Reader::fail();
-  }
+  d.storage_ = std::move(owner);
+  return d;
+}
+
+Dictionary Dictionary::from_binary(std::string_view bytes, bool verify_checksum) {
+  // Copy into 8-byte aligned memory so the arrays can be used in place.
+  auto buffer = std::make_shared<std::vector<std::uint64_t>>((bytes.size() + 7) / 8);
+  if (!bytes.empty()) std::memcpy(buffer->data(), bytes.data(), bytes.size());
+  const char* data = reinterpret_cast<const char*>(buffer->data());
+  return parse_binary(data, bytes.size(), std::move(buffer), verify_checksum);
+}
+
+Dictionary Dictionary::map_file(const std::filesystem::path& path, bool verify_checksum) {
+  auto file = std::make_shared<detail::MappedFile>(path);
+  const char* data = file->data();
+  const std::size_t size = file->size();
+  if (data == nullptr) throw std::runtime_error("dictionary file is empty: " + path.string());
+  Dictionary d = parse_binary(data, size, std::move(file), verify_checksum);
+  d.mapped_ = true;
   return d;
 }
 
 Dictionary Dictionary::from_file(const std::filesystem::path& path, LoadReport* report,
                                  DictionaryOptions options) {
-  const std::string data = read_file(path);
-  if (!has_magic(data)) {
-    std::istringstream in(data);
+  if (!file_has_magic(path)) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot open dictionary " + path.string());
     return from_tsv(in, report, options);
   }
-  Dictionary d = from_binary(data);
+  Dictionary d = map_file(path, options.verify_checksum);
   if (options.unknown_cost) d.unknown_cost_ = options.unknown_cost;
   if (report) report->entries = d.size();
   return d;

@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -126,21 +128,44 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Dictionary load times: TSV parse plus trie build, and the binary format.
+  // Dictionary load times. A TSV dictionary is parsed once and written to a
+  // temporary .khd so that the binary paths can be timed as well. The
+  // benchmark itself uses a heap copy, so the temporary file can be deleted.
   std::shared_ptr<const khseg::Dictionary> dict;
-  double tsv_ms = -1, bin_ms = -1;
+  double tsv_ms = -1, heap_ms = -1, map_verify_ms = -1, map_trust_ms = -1;
   try {
-    auto t0 = Clock::now();
-    auto d = khseg::Dictionary::from_file(dict_path);
-    const double first_ms = since(t0) * 1000;
-    const std::string bytes = d.to_binary();
-    t0 = Clock::now();
-    auto e = khseg::Dictionary::from_binary(bytes);
-    bin_ms = since(t0) * 1000;
-    const bool was_binary = bytes.size() > 0 && dict_path.size() > 4 &&
-                            dict_path.substr(dict_path.size() - 4) == ".khd";
-    if (!was_binary) tsv_ms = first_ms;
-    dict = std::make_shared<const khseg::Dictionary>(std::move(e));
+    std::string bytes;
+    {
+      std::ifstream in(dict_path, std::ios::binary);
+      if (!in) throw std::runtime_error("cannot open " + dict_path);
+      bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    std::filesystem::path khd = dict_path;
+    std::filesystem::path temp;
+    if (bytes.compare(0, 8, "KHSEGDIC") != 0) {
+      auto t0 = Clock::now();
+      const auto d = khseg::Dictionary::from_tsv_file(dict_path);
+      tsv_ms = since(t0) * 1000;
+      temp = std::filesystem::temp_directory_path() / "khseg-bench-dict.khd";
+      d.save_binary(temp);
+      khd = temp;
+      bytes = d.to_binary();
+    }
+    // Best of 5 for each way of loading a binary dictionary.
+    auto best_ms = [](auto load) {
+      double best = 1e300;
+      for (int i = 0; i < 5; ++i) {
+        const auto t0 = Clock::now();
+        load();
+        best = std::min(best, since(t0) * 1000);
+      }
+      return best;
+    };
+    heap_ms = best_ms([&] { khseg::Dictionary::from_binary(bytes); });
+    map_verify_ms = best_ms([&] { khseg::Dictionary::map_file(khd, true); });
+    map_trust_ms = best_ms([&] { khseg::Dictionary::map_file(khd, false); });
+    dict = std::make_shared<const khseg::Dictionary>(khseg::Dictionary::from_binary(bytes));
+    if (!temp.empty()) std::filesystem::remove(temp);
   } catch (const std::exception& ex) {
     std::cerr << "khseg-bench: " << ex.what() << "\n";
     return 2;
@@ -177,8 +202,10 @@ int main(int argc, char** argv) {
 
   std::printf("compiler     %s\n", compiler().c_str());
   std::printf("dictionary   %s, %zu words\n", dict_path.c_str(), dict->size());
-  if (tsv_ms >= 0) std::printf("load TSV     %.1f ms\n", tsv_ms);
-  std::printf("load binary  %.1f ms\n", bin_ms);
+  if (tsv_ms >= 0) std::printf("load TSV                   %8.2f ms\n", tsv_ms);
+  std::printf("load .khd into memory      %8.2f ms\n", heap_ms);
+  std::printf("map .khd, checksum         %8.2f ms\n", map_verify_ms);
+  std::printf("map .khd, no checksum      %8.2f ms\n", map_trust_ms);
   std::printf("input        %s, %.1f MB in %zu lines\n\n", input_path.c_str(), mb, lines.size());
   std::printf("%-22s %10s %10s %12s\n", "configuration", "MB/s", "best MB/s", "tokens/s");
 
