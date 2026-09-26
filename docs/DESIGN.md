@@ -189,7 +189,7 @@ This stage runs over code points and emits coarse tokens. Only `Khmer` runs go o
 
 **Policies (options with defaults):**
 
-- `zwsp_is_boundary = true`. Existing ZWSPs are author-provided break hints. They split Khmer runs and are never removed by the space and JSON formatters.
+- An existing ZWSP is always a boundary. Writers insert it as a break hint, so it splits Khmer runs. It is a Space token, so the space format drops it and the JSON format lists it. (An option to ignore ZWSP inside words was dropped: a ZWSP inside a word would also break dictionary lookup, so honouring it would need a second copy of the text.)
 - `lektoo = separate`. The ៗ mark becomes its own `Punct` token. The alternative, `attach`, glues it to the preceding word. Pick the default that matches the gold corpus conventions; check khPOS and ALT during data conversion (§5.3).
 - Khmer text uses spaces as phrase separators. Spaces are always hard boundaries, and no Khmer word spans a space.
 
@@ -311,7 +311,6 @@ struct Options {
   std::optional<double> unk_cost;      // nullopt → from dictionary header / default rule
   bool merge_unknown = true;
   bool normalize = true;
-  bool zwsp_is_boundary = true;
   enum class LekToo { Separate, Attach } lektoo = LekToo::Separate;
   enum class InvalidUtf8 { Replace, Error } invalid_utf8 = InvalidUtf8::Replace;
 };
@@ -602,7 +601,7 @@ The critical path is M0 → M1 → M3 → M4 → M5. The normalizer (M8) can mov
 |---|---|---|
 | Different gold corpora use different segmentation conventions | F1 swings across corpora; tuning to one hurts the other | Report per corpus; document conventions (§5.3); build research dictionaries per convention |
 | Dictionary convention (ICU line-breaking) differs from gold convention | systematic precision loss | Weight dictionary counts from gold-train (research build); analyze errors by type |
-| Encoding noise: mis-ordered marks, stray ZWSP inside words, legacy font text | lookup misses, spurious unknowns | Normalizer; `zwsp_is_boundary` option; legacy-encoding heuristic warning (Latin-1 punctuation density in "Khmer" text) |
+| Encoding noise: mis-ordered marks, stray ZWSP inside words, legacy font text | lookup misses, spurious unknowns | Normalizer; legacy-encoding heuristic warning (Latin-1 punctuation density in "Khmer" text) |
 | License contamination of distributed data | cannot publish the default model | Two builds (§5.1); fetch-don't-vendor; `DATA_LICENSES.md`; CI check that no NC data is in the release artifact |
 | Hard-EM degeneracy | worse frequencies than uniform | Dev-set early stopping; compare against uniform-cost and khmerlbdict-prior baselines |
 | Windows console/encoding quirks | garbled CLI output | Binary mode, UTF-8 console code page, golden tests on Windows CI |

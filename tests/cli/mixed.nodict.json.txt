@@ -1,0 +1,4 @@
+{"line":1,"tokens":[{"text":"ខ្មែរ","start":0,"end":5,"type":"khmer"},{"text":" ","start":5,"end":6,"type":"space"},{"text":"2026","start":6,"end":10,"type":"number"},{"text":" ","start":10,"end":11,"type":"space"},{"text":"ឆ្នាំ","start":11,"end":16,"type":"khmer"},{"text":"។","start":16,"end":17,"type":"punct"},{"text":" ","start":17,"end":18,"type":"space"},{"text":"Hello","start":18,"end":23,"type":"latin"},{"text":",","start":23,"end":24,"type":"punct"},{"text":" ","start":24,"end":25,"type":"space"},{"text":"world","start":25,"end":30,"type":"latin"},{"text":"!","start":30,"end":31,"type":"punct"}]}
+{"line":2,"tokens":[{"text":"ភាសា","start":0,"end":4,"type":"khmer"},{"text":"​","start":4,"end":5,"type":"space"},{"text":"ខ្មែរ","start":5,"end":10,"type":"khmer"}]}
+{"line":3,"tokens":[]}
+{"line":4,"tokens":[{"text":"សួស្តី","start":0,"end":6,"type":"khmer"},{"text":" ","start":6,"end":7,"type":"space"},{"text":"😀","start":7,"end":8,"type":"other"}]}
