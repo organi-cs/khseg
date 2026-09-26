@@ -249,7 +249,7 @@ A dictionary match starting at cluster i is valid only if it **ends exactly at a
 
 **BMM:** mirror image using the reverse trie, scanning from `b_n` backwards.
 
-**BiMM:** run both and pick using the usual heuristic: fewer tokens, then fewer unknowns, then fewer single-cluster words, then FMM.
+**BiMM:** run both and pick using the usual heuristic: fewer tokens, then fewer unknowns, then fewer single-cluster words, then BMM (backward matching is usually the stronger of the two on tied cases).
 
 **Viterbi (default):**
 

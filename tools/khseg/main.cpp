@@ -4,10 +4,13 @@
 #include <cstdio>
 #include <iostream>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "../common/cli_io.hpp"
+#include "../common/dict_loader.hpp"
 
 namespace {
 
@@ -21,6 +24,8 @@ struct Config {
   std::string sep = " ";
   khseg::OffsetUnit offsets = khseg::OffsetUnit::CodePoints;
   bool strict_utf8 = false;
+  std::string dict_path;
+  bool verbose = false;
 };
 
 int run(const Config& cfg, const khseg::Segmenter& seg) {
@@ -121,6 +126,28 @@ int main(int argc, char** argv) {
           CLI::ignore_case));
   app.add_flag("--strict-utf8", cfg.strict_utf8, "Fail on invalid UTF-8 instead of using U+FFFD");
 
+  khseg::Options opts;
+  std::optional<double> unk_cost;
+  bool no_merge = false;
+  app.add_option("-d,--dict", cfg.dict_path,
+                 "Dictionary TSV (default: $KHSEG_DICT, then <exe>/../share/khseg/)");
+  app.add_option("-a,--algo", opts.algorithm, "Segmentation algorithm")
+      ->transform(CLI::CheckedTransformer(
+          std::map<std::string, khseg::Algorithm>{{"viterbi", khseg::Algorithm::Viterbi},
+                                                  {"fmm", khseg::Algorithm::Forward},
+                                                  {"bmm", khseg::Algorithm::Backward},
+                                                  {"bimm", khseg::Algorithm::Bidirectional}},
+          CLI::ignore_case));
+  app.add_option("--unk-cost", unk_cost, "Cost of one unknown cluster (default: from dictionary)")
+      ->check(CLI::PositiveNumber);
+  app.add_flag("--no-merge-unknown", no_merge, "Keep unknown clusters as separate tokens");
+  app.add_option("--lektoo", opts.lektoo, "Handling of the repetition mark U+17D7")
+      ->transform(CLI::CheckedTransformer(
+          std::map<std::string, khseg::LekTooPolicy>{{"separate", khseg::LekTooPolicy::Separate},
+                                                     {"attach", khseg::LekTooPolicy::Attach}},
+          CLI::ignore_case));
+  app.add_flag("-v,--verbose", cfg.verbose, "Report dictionary problems on stderr");
+
   try {
     app.parse(argc, argv);
   } catch (const CLI::ParseError& e) {
@@ -136,9 +163,21 @@ int main(int argc, char** argv) {
   if (json) cfg.format = Format::Json;
   if (!sep.empty()) cfg.sep = sep;
 
-  khseg::Options opts;
   if (cfg.strict_utf8) opts.invalid_utf8 = khseg::utf8::ErrorPolicy::Throw;
-  khseg::Segmenter seg(nullptr, opts);
+  opts.unknown_cost = unk_cost;
+  opts.merge_unknown = !no_merge;
+
+  std::shared_ptr<const khseg::Dictionary> dict;
+  try {
+    dict = khseg::cli::load_dictionary("khseg", cfg.dict_path, cfg.verbose);
+  } catch (const std::exception& e) {
+    std::cerr << "khseg: " << e.what() << '\n';
+    return kIoError;
+  }
+  if (!dict && cfg.format != Format::Clusters) {
+    std::cerr << "khseg: no dictionary found, Khmer text is not segmented (use --dict)\n";
+  }
+  khseg::Segmenter seg(dict, opts);
 
   return run(cfg, seg);
 }

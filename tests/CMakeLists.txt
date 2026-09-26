@@ -5,8 +5,10 @@ add_executable(khseg-tests
   unit/test_utf8.cpp
   unit/test_charclass.cpp
   unit/test_cluster.cpp
+  unit/test_dictionary.cpp
   unit/test_format.cpp
-  unit/test_pretokenize.cpp)
+  unit/test_pretokenize.cpp
+  unit/test_segmenter.cpp)
 target_link_libraries(khseg-tests PRIVATE khseg::khseg GTest::gtest_main)
 target_compile_definitions(khseg-tests PRIVATE
   KHSEG_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -41,4 +43,11 @@ if(KHSEG_BUILD_TOOLS)
   khseg_golden(bad_utf8_replace INPUT bad_utf8.txt EXPECTED bad_utf8.replaced.txt)
   khseg_golden(bad_utf8_strict INPUT bad_utf8.txt RC 3 ARGS --strict-utf8)
   khseg_golden(bad_option INPUT mixed.txt RC 1 ARGS --no-such-option)
+  khseg_golden(missing_dict INPUT mixed.txt RC 2 ARGS --dict no-such-dict.tsv)
+
+  set(sample_dict ${PROJECT_SOURCE_DIR}/data/sample/dict.tsv)
+  foreach(algo fmm bmm bimm)
+    khseg_golden(sample_${algo} INPUT ../../data/sample/raw.txt EXPECTED ../../data/sample/gold.txt
+      ARGS --dict ${sample_dict} --algo ${algo})
+  endforeach()
 endif()

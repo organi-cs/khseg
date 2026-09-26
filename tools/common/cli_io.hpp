@@ -129,6 +129,21 @@ class Output {
   std::string buf_;
 };
 
+// Directory of the running executable, or empty if it cannot be found.
+inline std::filesystem::path executable_dir() {
+#ifdef _WIN32
+  std::wstring buf(32768, L'\0');
+  const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+  if (n == 0) return {};
+  buf.resize(n);
+  return std::filesystem::path(buf).parent_path();
+#else
+  std::error_code ec;
+  auto p = std::filesystem::read_symlink("/proc/self/exe", ec);
+  return ec ? std::filesystem::path{} : p.parent_path();
+#endif
+}
+
 inline bool strip_bom(std::string& line) {
   if (line.size() >= 3 && line.compare(0, 3, "\xEF\xBB\xBF") == 0) {
     line.erase(0, 3);

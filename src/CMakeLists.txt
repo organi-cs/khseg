@@ -2,9 +2,11 @@ include(GenerateExportHeader)
 
 add_library(khseg
   cluster.cpp
+  dictionary.cpp
   format.cpp
   pretokenize.cpp
   segmenter.cpp
+  trie.cpp
   utf8.cpp
   version.cpp)
 add_library(khseg::khseg ALIAS khseg)
