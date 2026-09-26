@@ -1,6 +1,8 @@
 function(khseg_configure_target target)
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /utf-8 /permissive- /Zc:__cplusplus)
+    # The suggested *_s replacements are MSVC-only; keep the portable calls.
+    target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
     if(KHSEG_WERROR)
       target_compile_options(${target} PRIVATE /WX)
     endif()
