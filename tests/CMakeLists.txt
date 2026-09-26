@@ -60,6 +60,10 @@ if(KHSEG_BUILD_TOOLS)
       ARGS --dict ${sample_dict} --algo ${algo})
   endforeach()
 
+  khseg_golden(sample_threads INPUT ../../data/sample/raw.txt EXPECTED ../../data/sample/gold.txt
+    ARGS --dict ${sample_dict} -j 3)
+  khseg_golden(mixed_json_threads INPUT mixed.txt EXPECTED mixed.nodict.json.txt ARGS --json -j 2)
+
   set(sample_gold ${PROJECT_SOURCE_DIR}/data/sample/gold.txt)
   khseg_golden(eval_sample TOOL khseg-eval INPUT mixed.txt EXPECTED eval_sample.txt
     ARGS --gold ${sample_gold} --dict ${sample_dict} --no-merge-unknown --bootstrap 200 --dump-errors 5)

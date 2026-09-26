@@ -57,3 +57,20 @@ The binary file is 13 MB, most of it the two double-array tries (7.5 MiB).
 `khseg -d lb.khd FILE > out` on a 50.4 MB file, including reading, writing
 and process start: 1.26 s (40 MB/s) for space-separated output and 1.74 s
 (29 MB/s) for JSON Lines.
+
+## Threads (`-j`)
+
+Same 50.4 MB file and 94k-word dictionary, space-separated output written
+to a file, best of 3 runs, end to end:
+
+| Threads | Time | MB/s |
+|---|---|---|
+| 1 | 1.37 s | 36.9 |
+| 2 | 0.79 s | 63.6 |
+| 4 | 0.54 s | 93.5 |
+| 6 | 0.47 s | 106.6 |
+| 12 | 0.44 s | 114.8 |
+
+Reading the input and writing the output stay on the main thread, which
+limits the speed-up past about 4 threads. The output is byte for byte the
+same for every thread count.
