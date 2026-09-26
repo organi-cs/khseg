@@ -1,6 +1,16 @@
 # khseg: Khmer Word Segmenter, Design and Implementation Plan
 
-Status: design, pre-implementation · 2026-09-27
+Status: M0 to M7 implemented (see git log). This document is the original plan; where the code differs, the notes below and the README describe what was built.
+
+Changes from the plan made during implementation:
+
+- Robat got its own character class so the validator can place it (section 3.2).
+- The option to ignore ZWSP inside words was dropped; ZWSP is always a boundary (section 3.4).
+- Bidirectional matching breaks final ties towards backward matching, not forward.
+- The algorithm write-up lives in the README instead of a separate docs/algorithm.md; the binary format is documented at the top of src/dictionary_io.cpp.
+- Bootstrap resampling draws indices with a plain modulo instead of std::uniform_int_distribution, so intervals match across standard libraries.
+- Dictionary words are stored in one flat UTF-32 buffer, including in the .khd file.
+- Not yet built (M8): normalizer, -j threads, ICU baseline, Python bindings.
 
 ---
 

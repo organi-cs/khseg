@@ -65,7 +65,8 @@ class KHSEG_EXPORT Dictionary {
                               DictionaryOptions options = {});
   static Dictionary from_binary(std::string_view bytes);
 
-  // Binary format: see docs/algorithm.md. Throws std::runtime_error on failure.
+  // Binary format: see the comment at the top of src/dictionary_io.cpp.
+  // Throws std::runtime_error on failure.
   void save_binary(const std::filesystem::path& path) const;
   std::string to_binary() const;
   // Words with counts, for tests and programmatic use. Invalid words are

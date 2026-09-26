@@ -9,9 +9,10 @@ Input: the unsegmented sentences of the ALT training split and all of khPOS
 is not included. Each figure is the median of 5 passes after one warm-up
 pass. Raw rows are in `throughput.csv`.
 
-Command:
+Commands (`experiments.py` writes `data/work/bench.txt` and the dictionaries):
 
 ```bash
+python scripts/experiments.py --bin build/mingw-release/tools
 khseg-dict build data/work/lb.tsv -o data/work/lb.khd
 khseg-bench -d data/work/lb.khd -i data/work/bench.txt --min-mb 100 --repeat 5
 ```

@@ -48,6 +48,11 @@ def prepare(bin_dir: pathlib.Path) -> None:
     for level in ("compound", "atom"):
         run([PY, s / "build_dict.py", "-o", W / f"alt.{level}.train.tsv",
              f"gold:{W / f'alt.{level}.train.txt'}"])
+    # Benchmark input for khseg-bench: every unsegmented sentence of ALT train and khPOS.
+    lines = []
+    for name in ("alt.compound.train.txt", "khpos.trainall.txt"):
+        lines += ["".join(l.split()) for l in (W / name).read_text(encoding="utf-8").splitlines()]
+    (W / "bench.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     # Open word lists, counts estimated from ALT text with hard EM, tuned on khPOS dev.
     subprocess.run([PY, s / "build_freq.py", "--vocab", W / "lb.tsv", "--corpus",
                     W / "alt.compound.train.txt", "--corpus-is-gold", "--dev",
