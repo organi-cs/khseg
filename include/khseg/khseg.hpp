@@ -3,6 +3,7 @@
 #include <khseg/charclass.hpp>
 #include <khseg/cluster.hpp>
 #include <khseg/dictionary.hpp>
+#include <khseg/eval.hpp>
 #include <khseg/format.hpp>
 #include <khseg/pretokenize.hpp>
 #include <khseg/segmenter.hpp>

@@ -1,0 +1,9 @@
+sentences    32 (skipped 0)
+words        P 98.89  R 99.44  F1 99.16  (95% CI 96.55 to 100.00)
+             gold 179, predicted 180, correct 178
+boundaries   P 99.32  R 100.00  F1 99.66
+exact match  96.88%
+vocabulary   OOV rate 0.70%  OOV recall 0.00%  IV recall 100.00%
+line 31
+  gold: [សុខា] ទៅ សាលារៀន ។
+  pred: [សុ] [ខា] ទៅ សាលារៀន ។

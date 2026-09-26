@@ -3,6 +3,7 @@ include(GenerateExportHeader)
 add_library(khseg
   cluster.cpp
   dictionary.cpp
+  eval.cpp
   format.cpp
   pretokenize.cpp
   segmenter.cpp

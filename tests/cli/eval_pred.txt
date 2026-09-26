@@ -1,0 +1,5 @@
+sentences    32 (skipped 0)
+words        P 98.32  R 98.32  F1 98.32
+             gold 179, predicted 179, correct 176
+boundaries   P 99.32  R 99.32  F1 99.32
+exact match  93.75%

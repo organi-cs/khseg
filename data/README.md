@@ -63,3 +63,17 @@ these.
 
 khPOS and ALT are non-commercial. Use them to evaluate, and keep any
 dictionary whose counts come from them out of anything you distribute.
+
+## Reproducing the accuracy numbers
+
+```bash
+python scripts/fetch_data.py
+python scripts/experiments.py --bin build/mingw-release/tools
+```
+
+`fetch_data.py` downloads the sources above into `data/external/`.
+`experiments.py` converts the corpora to gold format (`convert_khpos.py`,
+`convert_alt.py`), splits off dev sets (`split.py`), builds dictionaries
+(`build_dict.py`, and `build_freq.py` for counts estimated by hard EM),
+tunes the unknown-cluster cost on dev, scores the test sets once and writes
+`bench/results/accuracy.md`. Intermediate files go to `data/work/`.
