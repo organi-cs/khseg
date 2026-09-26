@@ -5,6 +5,7 @@ add_executable(khseg-tests
   unit/test_utf8.cpp
   unit/test_charclass.cpp
   unit/test_cluster.cpp
+  unit/test_dat.cpp
   unit/test_dictionary.cpp
   unit/test_eval.cpp
   unit/test_format.cpp

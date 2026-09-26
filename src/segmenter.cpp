@@ -4,7 +4,6 @@
 #include <khseg/segmenter.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <tuple>
 
@@ -39,17 +38,17 @@ std::uint32_t prev_boundary(const std::vector<std::uint8_t>& is_boundary, std::u
 // that ends on a boundary; if there is none, take one cluster as unknown.
 void forward_match(std::u32string_view text, const Dictionary& dict,
                    const std::vector<std::uint8_t>& is_boundary, std::vector<Token>& out) {
-  const RefTrie& trie = dict.forward();
+  const DoubleArrayTrie& trie = dict.forward();
   const auto len = static_cast<std::uint32_t>(text.size());
   std::uint32_t p = 0;
   while (p < len) {
-    std::uint32_t node = RefTrie::kRoot;
+    std::uint32_t node = DoubleArrayTrie::kRoot;
     std::uint32_t best_end = 0;
     std::uint32_t best_id = kNoEntry;
     for (std::uint32_t q = p; q < len; ++q) {
       node = trie.step(node, text[q]);
-      if (node == RefTrie::kNone) break;
-      if (is_boundary[q + 1] && trie.value(node) != RefTrie::kNone) {
+      if (node == DoubleArrayTrie::kNone) break;
+      if (is_boundary[q + 1] && trie.value(node) != DoubleArrayTrie::kNone) {
         best_end = q + 1;
         best_id = trie.value(node);
       }
@@ -69,17 +68,17 @@ void forward_match(std::u32string_view text, const Dictionary& dict,
 // trie of reversed words.
 void backward_match(std::u32string_view text, const Dictionary& dict,
                     const std::vector<std::uint8_t>& is_boundary, std::vector<Token>& out) {
-  const RefTrie& trie = dict.backward();
+  const DoubleArrayTrie& trie = dict.backward();
   const std::size_t first = out.size();
   auto e = static_cast<std::uint32_t>(text.size());
   while (e > 0) {
-    std::uint32_t node = RefTrie::kRoot;
+    std::uint32_t node = DoubleArrayTrie::kRoot;
     std::uint32_t best_start = 0;
     std::uint32_t best_id = kNoEntry;
     for (std::uint32_t q = e; q-- > 0;) {
       node = trie.step(node, text[q]);
-      if (node == RefTrie::kNone) break;
-      if (is_boundary[q] && trie.value(node) != RefTrie::kNone) {
+      if (node == DoubleArrayTrie::kNone) break;
+      if (is_boundary[q] && trie.value(node) != DoubleArrayTrie::kNone) {
         best_start = q;
         best_id = trie.value(node);
       }
@@ -105,7 +104,7 @@ void viterbi(std::u32string_view text, const Dictionary& dict, double unknown_co
              std::vector<Token>& out) {
   constexpr double kInf = std::numeric_limits<double>::infinity();
   constexpr double kEps = 1e-9;
-  const RefTrie& trie = dict.forward();
+  const DoubleArrayTrie& trie = dict.forward();
   const auto len = static_cast<std::uint32_t>(text.size());
   const std::vector<std::uint8_t>& is_boundary = ws.is_boundary;
 
@@ -119,7 +118,7 @@ void viterbi(std::u32string_view text, const Dictionary& dict, double unknown_co
     const double c = ws.best[from] + cost;
     const std::uint32_t n = ws.ntokens[from] + 1;
     const double cur = ws.best[to];
-    if (c < cur - kEps || (std::abs(c - cur) <= kEps && n < ws.ntokens[to])) {
+    if (c < cur - kEps || (c <= cur + kEps && n < ws.ntokens[to])) {
       ws.best[to] = c;
       ws.ntokens[to] = n;
       ws.back_from[to] = from;
@@ -129,12 +128,12 @@ void viterbi(std::u32string_view text, const Dictionary& dict, double unknown_co
 
   for (std::uint32_t p = 0; p < len; ++p) {
     if (!is_boundary[p] || ws.best[p] == kInf) continue;
-    std::uint32_t node = RefTrie::kRoot;
+    std::uint32_t node = DoubleArrayTrie::kRoot;
     for (std::uint32_t q = p; q < len; ++q) {
       node = trie.step(node, text[q]);
-      if (node == RefTrie::kNone) break;
+      if (node == DoubleArrayTrie::kNone) break;
       const std::uint32_t id = trie.value(node);
-      if (id != RefTrie::kNone && is_boundary[q + 1]) relax(q + 1, p, dict.cost(id), id);
+      if (id != DoubleArrayTrie::kNone && is_boundary[q + 1]) relax(q + 1, p, dict.cost(id), id);
     }
     relax(next_boundary(is_boundary, p), p, unknown_cost, kNoEntry);
   }

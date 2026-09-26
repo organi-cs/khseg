@@ -144,7 +144,7 @@ struct Dictionary::Builder {
     if (!(options.alpha > 0)) throw std::invalid_argument("dictionary alpha must be > 0");
     Dictionary d;
     d.format_ = format;
-    d.unknown_cost_ = unknown_cost;
+    d.unknown_cost_ = options.unknown_cost ? options.unknown_cost : unknown_cost;
     const std::size_t n = words.size();
     d.counts_.resize(n);
     d.costs_.resize(n);
@@ -169,15 +169,21 @@ struct Dictionary::Builder {
       }
     }
 
+    RefTrie fwd, bwd;
     for (std::size_t i = 0; i < n; ++i) {
       const auto id = static_cast<std::uint32_t>(i);
       d.max_cost_ = std::max(d.max_cost_, d.costs_[i]);
       d.max_len_ = std::max(d.max_len_, words[i].size());
-      d.forward_.insert(words[i], id);
+      fwd.insert(words[i], id);
       std::u32string rev(words[i].rbegin(), words[i].rend());
-      d.backward_.insert(rev, id);
+      bwd.insert(rev, id);
     }
-    d.words_ = std::move(words);
+    d.forward_ = DoubleArrayTrie::build(fwd);
+    d.backward_ = DoubleArrayTrie::build(bwd);
+    for (const auto& w : words) {
+      d.word_blob_ += w;
+      d.word_offsets_.push_back(static_cast<std::uint32_t>(d.word_blob_.size()));
+    }
     if (report) report->entries = n;
     return d;
   }
@@ -248,7 +254,7 @@ double Dictionary::default_unknown_cost() const noexcept {
 
 std::uint32_t Dictionary::find(std::u32string_view word) const noexcept {
   const std::uint32_t id = forward_.find(word);
-  return id == RefTrie::kNone ? kNoEntry : id;
+  return id == DoubleArrayTrie::kNone ? kNoEntry : id;
 }
 
 }  // namespace khseg

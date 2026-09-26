@@ -36,6 +36,8 @@ struct LoadReport {
 struct DictionaryOptions {
   // Additive smoothing constant for P(w) = (c(w) + alpha) / (N + alpha * V).
   double alpha = 0.5;
+  // Replaces the "# unknown-cost:" value from the file, if set.
+  std::optional<double> unknown_cost;
 };
 
 // Word list with unigram costs. Build it from a TSV file:
@@ -56,13 +58,25 @@ class KHSEG_EXPORT Dictionary {
                              DictionaryOptions options = {});
   static Dictionary from_tsv_file(const std::filesystem::path& path, LoadReport* report = nullptr,
                                   DictionaryOptions options = {});
+  // Reads a TSV file or a binary .khd file, telling them apart by content.
+  // For a binary file `report` only gets the entry count and `options.alpha`
+  // is ignored, because costs are stored precomputed.
+  static Dictionary from_file(const std::filesystem::path& path, LoadReport* report = nullptr,
+                              DictionaryOptions options = {});
+  static Dictionary from_binary(std::string_view bytes);
+
+  // Binary format: see docs/algorithm.md. Throws std::runtime_error on failure.
+  void save_binary(const std::filesystem::path& path) const;
+  std::string to_binary() const;
   // Words with counts, for tests and programmatic use. Invalid words are
   // rejected the same way as in a file.
   static Dictionary from_words(const std::vector<std::pair<std::u32string, double>>& words,
                                LoadReport* report = nullptr, DictionaryOptions options = {});
 
-  std::size_t size() const noexcept { return words_.size(); }
-  std::u32string_view word(std::uint32_t id) const noexcept { return words_[id]; }
+  std::size_t size() const noexcept { return word_offsets_.size() - 1; }
+  std::u32string_view word(std::uint32_t id) const noexcept {
+    return std::u32string_view(word_blob_).substr(word_offsets_[id], word_offsets_[id + 1] - word_offsets_[id]);
+  }
   double count(std::uint32_t id) const noexcept { return counts_[id]; }
   double cost(std::uint32_t id) const noexcept { return costs_[id]; }
   double total_count() const noexcept { return total_; }
@@ -77,14 +91,16 @@ class KHSEG_EXPORT Dictionary {
   std::uint32_t find(std::u32string_view word) const noexcept;
 
   // Tries over the words and over the reversed words (for backward matching).
-  const RefTrie& forward() const noexcept { return forward_; }
-  const RefTrie& backward() const noexcept { return backward_; }
+  const DoubleArrayTrie& forward() const noexcept { return forward_; }
+  const DoubleArrayTrie& backward() const noexcept { return backward_; }
   std::size_t max_word_length() const noexcept { return max_len_; }
 
  private:
   struct Builder;
 
-  std::vector<std::u32string> words_;
+  // All words back to back; word i is [word_offsets_[i], word_offsets_[i + 1]).
+  std::u32string word_blob_;
+  std::vector<std::uint32_t> word_offsets_{0};
   std::vector<double> counts_;
   std::vector<double> costs_;
   double total_ = 0.0;
@@ -92,8 +108,8 @@ class KHSEG_EXPORT Dictionary {
   std::size_t max_len_ = 0;
   ValueFormat format_ = ValueFormat::Count;
   std::optional<double> unknown_cost_;
-  RefTrie forward_;
-  RefTrie backward_;
+  DoubleArrayTrie forward_;
+  DoubleArrayTrie backward_;
 };
 
 }  // namespace khseg

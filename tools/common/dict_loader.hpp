@@ -48,7 +48,7 @@ inline std::shared_ptr<const Dictionary> load_dictionary(const std::string& tool
   LoadReport report;
   DictionaryOptions opts;
   opts.alpha = alpha;
-  auto dict = std::make_shared<const Dictionary>(Dictionary::from_tsv_file(path, &report, opts));
+  auto dict = std::make_shared<const Dictionary>(Dictionary::from_file(path, &report, opts));
   print_report(tool, path, report, verbose);
   return dict;
 }
