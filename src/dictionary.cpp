@@ -1,6 +1,7 @@
 #include <khseg/charclass.hpp>
 #include <khseg/cluster.hpp>
 #include <khseg/dictionary.hpp>
+#include <khseg/normalize.hpp>
 #include <khseg/token.hpp>
 #include <khseg/utf8.hpp>
 
@@ -98,6 +99,7 @@ struct Dictionary::Builder {
                   " at offset " + std::to_string(issues.front().offset));
     }
 
+    if (options.normalize) w = khseg::normalize(w);
     auto [it, inserted] = index.try_emplace(w, static_cast<std::uint32_t>(words.size()));
     if (inserted) {
       words.push_back(std::move(w));

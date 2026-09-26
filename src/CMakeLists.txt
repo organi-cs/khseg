@@ -5,6 +5,7 @@ add_library(khseg
   dictionary.cpp
   dictionary_io.cpp
   eval.cpp
+  normalize.cpp
   format.cpp
   pretokenize.cpp
   segmenter.cpp

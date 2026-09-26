@@ -34,6 +34,9 @@ struct Options {
   // Merge adjacent unknown clusters into a single Unknown token.
   bool merge_unknown = true;
   LekTooPolicy lektoo = LekTooPolicy::Separate;
+  // Reorder marks inside each cluster before dictionary lookup (see
+  // normalize.hpp). Token offsets always refer to the original text.
+  bool normalize = true;
   utf8::ErrorPolicy invalid_utf8 = utf8::ErrorPolicy::Replace;
 };
 
@@ -53,6 +56,9 @@ struct Workspace {
   std::vector<std::uint32_t> back_from;
   std::vector<std::uint32_t> back_entry;
   std::vector<Token> scratch;
+  std::u32string norm;                       // normalized copy of the current run
+  std::vector<std::uint32_t> norm_clusters;  // its cluster boundaries
+  std::vector<std::uint32_t> norm_to_orig;   // normalized boundary offset -> original offset
 };
 
 class KHSEG_EXPORT Segmenter {

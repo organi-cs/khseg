@@ -150,6 +150,8 @@ int main(int argc, char** argv) {
   app.add_option("--alpha", alpha, "Smoothing constant for dictionary counts")
       ->check(CLI::PositiveNumber);
   app.add_flag("--no-merge-unknown", no_merge, "Keep unknown clusters as separate tokens");
+  bool no_normalize = false;
+  app.add_flag("--no-normalize", no_normalize, "Do not reorder marks before dictionary lookup");
   app.add_option("--lektoo", seg_opts.lektoo, "Handling of U+17D7")
       ->transform(CLI::CheckedTransformer(
           std::map<std::string, khseg::LekTooPolicy>{{"separate", khseg::LekTooPolicy::Separate},
@@ -171,6 +173,7 @@ int main(int argc, char** argv) {
   }
   seg_opts.unknown_cost = unk_cost;
   seg_opts.merge_unknown = !no_merge;
+  seg_opts.normalize = !no_normalize;
 
   std::vector<std::string> gold;
   if (!read_lines(gold_path, gold)) {

@@ -1,11 +1,12 @@
 // Properties that must hold for every input and every algorithm:
 //   1. tokens cover the input with no gaps or overlaps (code points and bytes)
 //   2. a boundary inside Khmer text is always a cluster boundary
-//   3. Word tokens spell exactly their dictionary entry
+//   3. Word tokens spell their dictionary entry (after normalizing)
 //   4. the same input gives the same output
 #include <gtest/gtest.h>
 #include <khseg/cluster.hpp>
 #include <khseg/dictionary.hpp>
+#include <khseg/normalize.hpp>
 #include <khseg/segmenter.hpp>
 #include <khseg/utf8.hpp>
 
@@ -90,7 +91,12 @@ void check(const Segmenter& seg, const std::string& in) {
     }
     if (t.type == TokenType::Word) {
       ASSERT_NE(t.entry, khseg::kNoEntry);
-      EXPECT_EQ(seg.dictionary()->word(t.entry), std::u32string_view(text).substr(t.begin, t.end - t.begin));
+      const auto span = std::u32string_view(text).substr(t.begin, t.end - t.begin);
+      if (seg.options().normalize) {
+        EXPECT_EQ(seg.dictionary()->word(t.entry), khseg::normalize(span));
+      } else {
+        EXPECT_EQ(seg.dictionary()->word(t.entry), span);
+      }
     }
   }
   EXPECT_EQ(pos, text.size()) << in;
@@ -107,11 +113,14 @@ class Invariants : public ::testing::TestWithParam<Algorithm> {};
 
 TEST_P(Invariants, HoldOnAllInputs) {
   for (bool merge : {true, false}) {
-    Options o;
-    o.algorithm = GetParam();
-    o.merge_unknown = merge;
-    const Segmenter seg(sample_dict(), o);
-    for (const auto& in : inputs()) check(seg, in);
+    for (bool norm : {true, false}) {
+      Options o;
+      o.algorithm = GetParam();
+      o.merge_unknown = merge;
+      o.normalize = norm;
+      const Segmenter seg(sample_dict(), o);
+      for (const auto& in : inputs()) check(seg, in);
+    }
   }
 }
 

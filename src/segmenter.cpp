@@ -1,5 +1,6 @@
 #include <khseg/cluster.hpp>
 #include <khseg/dictionary.hpp>
+#include <khseg/normalize.hpp>
 #include <khseg/pretokenize.hpp>
 #include <khseg/segmenter.hpp>
 
@@ -214,10 +215,34 @@ void Segmenter::segment(std::string_view utf8, Workspace& ws, std::vector<Token>
 }
 
 void Segmenter::segment_run(const Token& run, Workspace& ws, std::vector<Token>& out) const {
-  const std::u32string_view text = std::u32string_view(ws.text).substr(run.begin, run.end - run.begin);
-  cluster_boundaries(text, ws.clusters);
+  const std::u32string_view orig =
+      std::u32string_view(ws.text).substr(run.begin, run.end - run.begin);
+  cluster_boundaries(orig, ws.clusters);
+
+  // Segment a normalized copy when normalizing changes anything. It has the
+  // same number of clusters, so its boundaries map one to one onto the
+  // original ones.
+  std::u32string_view text = orig;
+  bool mapped = false;
+  if (options_.normalize) {
+    ws.norm.clear();
+    ws.norm_clusters.assign(1, 0);
+    for (std::size_t k = 0; k + 1 < ws.clusters.size(); ++k) {
+      normalize_cluster(orig.substr(ws.clusters[k], ws.clusters[k + 1] - ws.clusters[k]), ws.norm);
+      ws.norm_clusters.push_back(static_cast<std::uint32_t>(ws.norm.size()));
+    }
+    if (ws.norm != orig) {
+      text = ws.norm;
+      mapped = true;
+      ws.norm_to_orig.assign(ws.norm.size() + 1, 0);
+      for (std::size_t k = 0; k < ws.norm_clusters.size(); ++k) {
+        ws.norm_to_orig[ws.norm_clusters[k]] = ws.clusters[k];
+      }
+    }
+  }
+  const std::vector<std::uint32_t>& bounds = mapped ? ws.norm_clusters : ws.clusters;
   ws.is_boundary.assign(text.size() + 1, 0);
-  for (std::uint32_t b : ws.clusters) ws.is_boundary[b] = 1;
+  for (std::uint32_t b : bounds) ws.is_boundary[b] = 1;
 
   ws.scratch.clear();
   switch (options_.algorithm) {
@@ -247,6 +272,10 @@ void Segmenter::segment_run(const Token& run, Workspace& ws, std::vector<Token>&
   }
 
   for (Token t : ws.scratch) {
+    if (mapped) {
+      t.begin = ws.norm_to_orig[t.begin];
+      t.end = ws.norm_to_orig[t.end];
+    }
     t.begin += run.begin;
     t.end += run.begin;
     if (options_.merge_unknown && t.type == TokenType::Unknown && !out.empty() &&

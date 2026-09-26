@@ -10,6 +10,7 @@ add_executable(khseg-tests
   unit/test_eval.cpp
   unit/test_format.cpp
   unit/test_invariants.cpp
+  unit/test_normalize.cpp
   unit/test_pretokenize.cpp
   unit/test_segmenter.cpp
   unit/test_viterbi.cpp)

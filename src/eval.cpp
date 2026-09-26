@@ -1,6 +1,7 @@
 #include <khseg/charclass.hpp>
 #include <khseg/dictionary.hpp>
 #include <khseg/eval.hpp>
+#include <khseg/normalize.hpp>
 #include <khseg/pretokenize.hpp>
 #include <khseg/utf8.hpp>
 
@@ -105,7 +106,7 @@ bool score_sentence(const std::vector<std::string_view>& gold,
     for (std::size_t i = 0; i < g.size(); ++i) {
       const std::u32string w = utf8::decode(g[i].word);
       if (w.empty() || !is_khmer_letter(classify(w.front()))) continue;
-      const bool known = options.dictionary->find(w) != kNoEntry;
+      const bool known = options.dictionary->find(normalize(w)) != kNoEntry;
       (known ? s.iv_gold : s.oov_gold) += 1;
       if (matched[i]) (known ? s.iv_correct : s.oov_correct) += 1;
     }

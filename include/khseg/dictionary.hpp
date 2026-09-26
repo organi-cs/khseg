@@ -38,6 +38,9 @@ struct DictionaryOptions {
   double alpha = 0.5;
   // Replaces the "# unknown-cost:" value from the file, if set.
   std::optional<double> unknown_cost;
+  // Store words with their marks in canonical order (see normalize.hpp), so
+  // that differently typed spellings of one word become one entry.
+  bool normalize = true;
 };
 
 // Word list with unigram costs. Build it from a TSV file:

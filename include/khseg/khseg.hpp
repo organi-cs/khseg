@@ -5,6 +5,7 @@
 #include <khseg/dictionary.hpp>
 #include <khseg/eval.hpp>
 #include <khseg/format.hpp>
+#include <khseg/normalize.hpp>
 #include <khseg/pretokenize.hpp>
 #include <khseg/segmenter.hpp>
 #include <khseg/token.hpp>

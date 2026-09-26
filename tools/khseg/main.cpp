@@ -141,6 +141,8 @@ int main(int argc, char** argv) {
   app.add_option("--unk-cost", unk_cost, "Cost of one unknown cluster (default: from dictionary)")
       ->check(CLI::PositiveNumber);
   app.add_flag("--no-merge-unknown", no_merge, "Keep unknown clusters as separate tokens");
+  bool no_normalize = false;
+  app.add_flag("--no-normalize", no_normalize, "Do not reorder marks before dictionary lookup");
   app.add_option("--lektoo", opts.lektoo, "Handling of the repetition mark U+17D7")
       ->transform(CLI::CheckedTransformer(
           std::map<std::string, khseg::LekTooPolicy>{{"separate", khseg::LekTooPolicy::Separate},
@@ -166,6 +168,7 @@ int main(int argc, char** argv) {
   if (cfg.strict_utf8) opts.invalid_utf8 = khseg::utf8::ErrorPolicy::Throw;
   opts.unknown_cost = unk_cost;
   opts.merge_unknown = !no_merge;
+  opts.normalize = !no_normalize;
 
   std::shared_ptr<const khseg::Dictionary> dict;
   try {
