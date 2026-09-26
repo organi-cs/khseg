@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+# Test fixtures must reach the tools byte for byte.
+tests/cli/** -text
+data/sample/** -text

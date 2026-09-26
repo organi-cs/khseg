@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-gcc, os: ubuntu-24.04, preset: linux-release, cc: gcc-13, cxx: g++-13 }
+          - { name: linux-clang-asan, os: ubuntu-24.04, preset: linux-asan, cc: clang-18, cxx: clang++-18 }
+          - { name: windows-msvc, os: windows-2022, preset: msvc, build: msvc-release, test: msvc-release }
+          - { name: windows-mingw, os: windows-2022, preset: mingw-release }
+          - { name: macos, os: macos-14, preset: linux-release }
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        if: runner.os != 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v5
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.build || matrix.preset }} --parallel
+      - name: Test
+        run: ctest --preset ${{ matrix.test || matrix.preset }}

@@ -1,0 +1,12 @@
+/build/
+/out/
+/.vs/
+/.vscode/
+/.cache/
+compile_commands.json
+*.khd
+__pycache__/
+*.egg-info/
+/python/dist/
+/data/external/
+/data/work/

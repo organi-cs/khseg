@@ -1,0 +1,16 @@
+#pragma once
+
+#include <khseg/export.hpp>
+
+#define KHSEG_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define KHSEG_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define KHSEG_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define KHSEG_VERSION_STRING "@PROJECT_VERSION@"
+
+namespace khseg {
+
+// Version of the library actually linked, which can differ from the header
+// when khseg is used as a shared library.
+KHSEG_EXPORT const char* version() noexcept;
+
+}  // namespace khseg

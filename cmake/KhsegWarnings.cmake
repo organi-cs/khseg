@@ -1,0 +1,28 @@
+function(khseg_configure_target target)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /W4 /utf-8 /permissive- /Zc:__cplusplus)
+    if(KHSEG_WERROR)
+      target_compile_options(${target} PRIVATE /WX)
+    endif()
+  else()
+    target_compile_options(${target} PRIVATE
+      -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow)
+    if(KHSEG_WERROR)
+      target_compile_options(${target} PRIVATE -Werror)
+    endif()
+  endif()
+
+  if(KHSEG_SANITIZE AND NOT MSVC)
+    list(JOIN KHSEG_SANITIZE "," _san)
+    target_compile_options(${target} PRIVATE -fsanitize=${_san} -fno-omit-frame-pointer)
+    target_link_options(${target} PRIVATE -fsanitize=${_san})
+  endif()
+
+  # MinGW executables otherwise depend on libstdc++/libgcc DLLs being on PATH.
+  if(MINGW)
+    get_target_property(_type ${target} TYPE)
+    if(_type STREQUAL "EXECUTABLE")
+      target_link_options(${target} PRIVATE -static)
+    endif()
+  endif()
+endfunction()
