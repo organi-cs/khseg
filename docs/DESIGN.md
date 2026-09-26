@@ -121,7 +121,8 @@ A single 128-entry `constexpr` table for U+1780–U+17FF, plus a few special cas
 | `DepV` | U+17B6–U+17C5 | dependent vowels |
 | `Sign` | U+17C6–U+17C8 | nikahit, reahmuk, yuukaleapintu |
 | `Shifter` | U+17C9, U+17CA | register shifters (muusikatoan, triisap) |
-| `Diac` | U+17CB–U+17D1, U+17D3, U+17DD | bantoc, robat, toandakhiat, kakabat, ahsda, samyok sannya, viriam, bathamasat, atthacan |
+| `Robat` | U+17CC | robat, a separate class because the validator needs its slot |
+| `Diac` | U+17CB, U+17CD–U+17D1, U+17D3, U+17DD | bantoc, toandakhiat, kakabat, ahsda, samyok sannya, viriam, bathamasat, atthacan |
 | `Coeng` | U+17D2 | subscript marker |
 | `Punct` | U+17D4–U+17D6, U+17D8–U+17DA | ។ ៕ ៖ ៘ ៙ ៚ |
 | `LekToo` | U+17D7 | ៗ repetition mark (own class, policy in §3.4) |
