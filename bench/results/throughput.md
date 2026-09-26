@@ -1,13 +1,14 @@
 # Throughput
 
-Measured 2026-09-27 on an AMD Ryzen 5 5600H (6 cores), 16 GB RAM, Windows 11,
-MinGW-w64 GCC 13.2.0, `mingw-release` preset (`-O3`, no `-march`). Single
-thread. MB means 10^6 bytes of UTF-8 input.
+Measured 2026-09-27 on an AMD Ryzen 5 5600H (6 cores, 12 threads), 16 GB RAM,
+Windows 11, MinGW-w64 GCC 13.2.0, `mingw-release` preset (`-O3`, no
+`-march`). MB means 10^6 bytes of UTF-8 input. Normalization is on (the
+default). Repeated runs on this laptop vary by about 10%.
 
 Input: the unsegmented sentences of the ALT training split and all of khPOS
 (8.4 MB, 28,022 lines), repeated to 100.6 MB and held in memory, so file I/O
 is not included. Each figure is the median of 5 passes after one warm-up
-pass. Raw rows are in `throughput.csv`.
+pass, single thread. Raw rows are in `throughput.csv`.
 
 Commands (`experiments.py` writes `data/work/bench.txt` and the dictionaries):
 
@@ -21,47 +22,52 @@ khseg-bench -d data/work/lb.khd -i data/work/bench.txt --min-mb 100 --repeat 5
 
 | Configuration | MB/s | Tokens/s |
 |---|---|---|
-| decode + pre-tokenize only | 379.8 | 4.57 M |
-| Viterbi | 48.9 | 3.80 M |
-| forward maximal matching | 96.5 | 7.20 M |
-| backward maximal matching | 94.0 | 7.02 M |
-| bidirectional maximal matching | 46.5 | 3.45 M |
+| decode + pre-tokenize only | 353.5 | 4.26 M |
+| Viterbi | 44.9 | 3.49 M |
+| forward maximal matching | 78.0 | 5.81 M |
+| backward maximal matching | 76.0 | 5.67 M |
+| bidirectional maximal matching | 40.7 | 3.02 M |
 
 ## khPOS training vocabulary (6,877 words)
 
 | Configuration | MB/s | Tokens/s |
 |---|---|---|
-| decode + pre-tokenize only | 411.0 | 4.95 M |
-| Viterbi | 88.1 | 6.76 M |
-| forward maximal matching | 145.9 | 11.20 M |
-| backward maximal matching | 141.0 | 10.82 M |
-| bidirectional maximal matching | 85.8 | 6.58 M |
+| decode + pre-tokenize only | 325.3 | 3.92 M |
+| Viterbi | 71.6 | 5.49 M |
+| forward maximal matching | 106.8 | 8.20 M |
+| backward maximal matching | 101.6 | 7.80 M |
+| bidirectional maximal matching | 69.8 | 5.35 M |
 
 Viterbi tries a dictionary walk from every cluster boundary, while maximal
-matching only walks from the start of each chosen word, so Viterbi doing
-about half the work rate is expected. A larger dictionary means longer trie
-walks. Bidirectional matching runs both directions and so costs about as
-much as Viterbi.
+matching only walks from the start of each chosen word, so Viterbi being
+slower is expected. A larger dictionary means longer trie walks.
+Bidirectional matching runs both directions and so costs about as much as
+Viterbi.
+
+Before normalization was added (commit 51ba654) the same benchmark gave
+48.9 MB/s for Viterbi and 96.5 MB/s for forward matching with the large
+dictionary. Checking every cluster for canonical order costs about 10% for
+Viterbi and about 20% for maximal matching; `--no-normalize` turns it off.
 
 ## Dictionary loading (94,060 words)
 
 | Format | Time |
 |---|---|
-| TSV (parse, validate, build both tries) | about 520 ms |
+| TSV (parse, validate, normalize, build both tries) | about 520 ms |
 | binary `.khd` (read, checksum, validate) | 20 to 60 ms |
 
 The binary file is 13 MB, most of it the two double-array tries (7.5 MiB).
 
 ## End to end
 
-`khseg -d lb.khd FILE > out` on a 50.4 MB file, including reading, writing
-and process start: 1.26 s (40 MB/s) for space-separated output and 1.74 s
-(29 MB/s) for JSON Lines.
+`khseg -d lb.khd FILE > out` on a 50.4 MB file (`bench.txt` six times),
+including reading, writing and process start, best of 3: 1.53 s (33 MB/s)
+for space-separated output and 1.87 s (27 MB/s) for JSON Lines.
 
 ## Threads (`-j`)
 
-Same 50.4 MB file and 94k-word dictionary, space-separated output written
-to a file, best of 3 runs, end to end:
+Same 50.4 MB file and dictionary, space-separated output written to a file,
+best of 3 runs, end to end:
 
 | Threads | Time | MB/s |
 |---|---|---|

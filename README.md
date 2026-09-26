@@ -61,6 +61,8 @@ khseg [options] [FILE...]      # reads standard input when no FILE is given
 | `--no-merge-unknown` | keep unknown clusters as separate tokens |
 | `--lektoo separate\|attach` | keep ៗ as its own token (default) or attach it to the word before |
 | `--strict-utf8` | fail on invalid UTF-8 instead of replacing it with U+FFFD |
+| `--no-normalize` | look words up exactly as typed, without reordering marks |
+| `-j, --threads N` | worker threads (0 = one per CPU); output order is kept |
 | `-v, --verbose` | report dictionary entries that were rejected |
 
 Output formats, one output line per input line:
@@ -152,7 +154,8 @@ against the python.org (MSVC) CPython; that is how it is tested here.
 UTF-8 bytes
   -> code points (invalid bytes become U+FFFD, byte offsets kept)
   -> pre-tokens: Khmer runs, numbers, Latin words, punctuation, symbols, spaces
-  -> each Khmer run is split into clusters
+  -> each Khmer run is split into clusters, and the marks in each cluster are
+     put in canonical order for lookup
   -> dictionary words that start and end on cluster boundaries form a lattice
   -> Viterbi picks the cheapest path; unknown clusters next to each other merge
   -> tokens (offsets only) -> output writer
@@ -177,8 +180,16 @@ Marks with no consonant before them become their own "orphan" cluster, so no
 input is ever lost. A separate validator checks each cluster against the
 canonical mark order (base, robat, up to two subscripts, register shifter,
 vowel, signs) and reports problems such as a vowel typed before a subscript.
-It is used for dictionary checks and never changes segmentation. The full
-tables and rules are in [docs/clusters.md](docs/clusters.md).
+It is used for dictionary checks. The full tables and rules are in
+[docs/clusters.md](docs/clusters.md).
+
+The same order drives normalization. ខែ្មរ (vowel typed before the
+subscript) and ខ្មែរ look identical on screen, but only one would match a
+dictionary entry. Before lookup each cluster is rewritten in canonical order,
+dropping the invisible inherent vowels U+17B4 and U+17B5 and repeated marks.
+Dictionary words are stored normalized too. Since only the inside of a
+cluster changes, the cluster count stays the same, and token offsets are
+mapped back to the original text through the cluster index.
 
 ### Pre-tokenizing
 
@@ -348,16 +359,21 @@ Word-level F1, in percent:
 
 | Test set | Dictionary | Viterbi | FMM |
 |---|---|---|---|
-| khPOS open test | khPOS training words and counts | **94.90** | 93.93 |
-| khPOS open test | open word lists with SEALang/Bible counts | **79.21** | 75.60 |
-| khPOS open test | open word lists, counts from EM on ALT text | 77.26 | |
-| khPOS open test | ICU list only (no counts) | 76.48 | 76.44 |
+| khPOS open test | khPOS training words and counts | **94.85** | 93.91 |
+| khPOS open test | open word lists with SEALang/Bible counts | **79.17** | 75.53 |
+| khPOS open test | open word lists, counts from EM on ALT text | 77.14 | |
+| khPOS open test | ICU list only (no counts) | 76.46 | 76.45 |
 | ALT test, atom level | ALT training words and counts | **93.79** | 89.76 |
 | ALT test, compound level | ALT training words and counts | **83.02** | 78.62 |
-| ALT test, compound level | khPOS training words (other corpus) | 73.27 | |
+| ALT test, compound level | khPOS training words (other corpus) | 73.31 | |
 
-On khPOS, Viterbi beats forward matching by 0.97 points (95% CI 0.68 to
-1.27, paired bootstrap, p < 0.001).
+On khPOS, Viterbi beats forward matching by 0.94 points (95% CI 0.65 to
+1.23, paired bootstrap, p < 0.001).
+
+Mark normalization (on by default) changes every score in the table by less
+than 0.1 point; both corpora are almost entirely in canonical order already.
+It matters for text typed with marks out of order, which these test sets do
+not contain much of.
 
 What the numbers say:
 
@@ -371,20 +387,23 @@ What the numbers say:
 - Counts matter: without them (ICU list only) Viterbi is no better than
   forward matching. Starting from equal counts, hard EM on unsegmented ALT
   text raised dev F1 from 75.3 to 77.0 in two rounds; on the test set these
-  EM counts give 77.26, against 79.21 with the SEALang/Bible counts.
+  EM counts give 77.14, against 79.17 with the SEALang/Bible counts.
 - The two corpora disagree with each other: a khPOS dictionary scores 73 on
   ALT.
+- These numbers are not compared with ICU's Khmer word break iterator yet;
+  see Limitations.
 
 Speed, single thread, Ryzen 5 5600H, GCC 13
 ([details](bench/results/throughput.md)):
 
 | | MB/s, 94k-word dictionary | MB/s, 7k-word dictionary |
 |---|---|---|
-| Viterbi | 48.9 | 88.1 |
-| forward matching | 96.5 | 145.9 |
+| Viterbi | 44.9 | 71.6 |
+| forward matching | 78.0 | 106.8 |
 
-The command line tool processes a 50 MB file in 1.3 s including I/O. The
-binary dictionary loads in 20 to 60 ms against about 520 ms for the TSV.
+The command line tool processes a 50 MB file in about 1.5 s including I/O
+with one thread, and in 0.44 s with `-j 12` (115 MB/s). The binary
+dictionary loads in 20 to 60 ms against about 520 ms for the TSV.
 
 ## Tools
 
@@ -422,7 +441,8 @@ khseg-bench -d khmer.khd -i corpus.txt --min-mb 100 --repeat 5 --csv results.csv
 
 ## Testing
 
-`ctest` runs 134 tests:
+`ctest` runs 145 C++ tests, plus 11 Python tests when the bindings are
+built:
 
 - UTF-8 decoding, including every class of malformed input.
 - The character table checked against UnicodeData.txt.
@@ -433,7 +453,12 @@ khseg-bench -d khmer.khd -i corpus.txt --min-mb 100 --repeat 5 --csv results.csv
 - A property test that the double-array trie agrees with a simple reference
   trie on 100,000 random queries.
 - Binary dictionary round trips and corruption checks.
-- Golden-file tests of the command line tools.
+- Mark normalization: fixed cases, plus 5,000 random strings checked for
+  idempotence and unchanged cluster count.
+- Golden-file tests of the command line tools, including that `-j` output
+  matches single-threaded output.
+- The Python API, including offsets against str slicing and use from
+  several threads.
 
 An invariants suite runs every algorithm on edge cases, invalid UTF-8, a 1 MB
 line and random strings. It checks that the tokens cover the input exactly,
@@ -449,9 +474,12 @@ dictionary entry, and that output is deterministic.
   clusters only merge with each other, so a name like អេលីសាបិត comes out as
   អេ លី សាបិត because លី is in the dictionary. A cost for unknown spans of
   several clusters, or a character model for names, would help.
-- There is no Unicode normalization yet. Text with marks typed in a
-  non-standard order (ខែ្មរ for ខ្មែរ) will not match the dictionary. The
-  cluster validator finds such text but does not fix it.
+- Normalization only reorders marks inside a cluster. It does not fix
+  spelling variants that use different letters (for example the old
+  subscript ដ versus ត in ត្ដ and ត្ត), and it leaves clusters with a stray
+  COENG untouched.
+- There is no comparison with ICU's dictionary-based Khmer word break
+  iterator yet. It needs ICU installed; `KHSEG_BENCH_ICU` is reserved for it.
 - No dictionary is shipped. You build one from the sources above, and the
   licenses decide what you can redistribute.
 - Text in legacy (non-Unicode) Khmer fonts is not detected.
@@ -462,6 +490,7 @@ dictionary entry, and that output is deterministic.
 include/khseg/   public headers
 src/             library
 tools/           khseg, khseg-eval, khseg-dict, khseg-bench
+python/          pybind11 bindings, type stubs and Python tests
 tests/           unit tests (GoogleTest) and CLI golden tests
 scripts/         data download, conversion, dictionary building, experiments
 data/sample/     small hand-written dictionary and gold file
