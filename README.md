@@ -18,6 +18,7 @@ $ echo "ខ្ញុំស្រលាញ់ប្រទេសកម្ពុជ
 Contents: [Build](#build) ·
 [Command line](#command-line) ·
 [Library](#library) ·
+[Python](#python) ·
 [How it works](#how-it-works) ·
 [Worked example](#worked-example) ·
 [Data](#data) ·
@@ -118,6 +119,32 @@ instance can be shared by any number of threads, each with its own
 Headers: `utf8.hpp` (decoder), `charclass.hpp` and `cluster.hpp` (Khmer
 clusters), `pretokenize.hpp`, `dictionary.hpp`, `trie.hpp`, `segmenter.hpp`,
 `format.hpp` (output writers), `eval.hpp` (scoring).
+
+## Python
+
+```bash
+pip install .          # builds the C++ core with CMake through scikit-build-core
+```
+
+```python
+import khseg
+
+seg = khseg.Segmenter("khmer.khd")           # or a khseg.Dictionary, or None
+seg.segment("ខ្ញុំស្រលាញ់ប្រទេសកម្ពុជា")       # ['ខ្ញុំ', 'ស្រលាញ់', 'ប្រទេស', 'កម្ពុជា']
+
+text = "ក្មេងៗ លេង"
+for t in seg.tokenize(text):                 # Token(text, start, end, type)
+    assert text[t.start:t.end] == t.text      # offsets are str indices
+
+khseg.clusters("ខ្មែរ")                        # ['ខ្មែ', 'រ']
+khseg.normalize("ខែ្មរ")                      # 'ខ្មែរ' (vowel had been typed before the subscript)
+```
+
+`Segmenter` takes the same options as the command line (`algorithm`,
+`unknown_cost`, `merge_unknown`, `normalize`, `lektoo`). `segment` and
+`tokenize` release the GIL, so several Python threads can segment at once.
+Type stubs are included. On Windows, the module also builds with MinGW
+against the python.org (MSVC) CPython; that is how it is tested here.
 
 ## How it works
 

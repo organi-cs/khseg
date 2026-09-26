@@ -1,0 +1,27 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "khseg"
+version = "0.1.0"
+description = "Khmer word segmentation: character clusters, dictionary and Viterbi search (C++ core)"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: Text Processing :: Linguistic",
+]
+
+[tool.scikit-build]
+cmake.version = ">=3.24"
+cmake.build-type = "Release"
+wheel.packages = ["python/khseg"]
+sdist.exclude = ["data/external", "data/work", "build"]
+
+[tool.scikit-build.cmake.define]
+KHSEG_BUILD_PYTHON = "ON"
+KHSEG_BUILD_TESTS = "OFF"
+KHSEG_BUILD_TOOLS = "OFF"

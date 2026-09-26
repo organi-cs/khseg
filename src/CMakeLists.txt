@@ -35,3 +35,6 @@ set_target_properties(khseg PROPERTIES
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR})
 khseg_configure_target(khseg)
+if(KHSEG_BUILD_PYTHON)
+  set_target_properties(khseg PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()

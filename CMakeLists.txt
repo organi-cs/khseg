@@ -42,4 +42,6 @@ if(KHSEG_BUILD_PYTHON)
   add_subdirectory(python)
 endif()
 
-include(KhsegInstall)
+if(NOT SKBUILD)
+  include(KhsegInstall)
+endif()
